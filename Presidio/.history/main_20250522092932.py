@@ -9,7 +9,7 @@ def create_app():
     
     # Setup logger
     logger = setup_logger()
-    logger.info("Iniciando aplicación Presidio API con soporte multilingüe (EN/ES)")
+    logger.info("Iniciando aplicación Presidio API")
     
     # Initialize services
     presidio_service = PresidioService()
@@ -25,8 +25,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    # En Docker configuramos para que los logs vayan a stdout
-    import os
-    is_docker = os.environ.get('RUNNING_IN_DOCKER', False)
-    debug_mode = not is_docker  # Desactivar debug mode en Docker para no interferir con los logs
-    app.run(host='0.0.0.0', port=5000, debug=debug_mode)
+    app.run(host='0.0.0.0', port=5000, debug=True)

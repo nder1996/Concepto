@@ -9,7 +9,7 @@ def create_app():
     
     # Setup logger
     logger = setup_logger()
-    logger.info("Iniciando aplicación Presidio API con soporte multilingüe (EN/ES)")
+    logger.info("Iniciando aplicación Presidio API")
     
     # Initialize services
     presidio_service = PresidioService()
