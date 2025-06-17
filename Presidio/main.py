@@ -1,7 +1,8 @@
 from flask import Flask
-from src.controllers.presidio_controller import PresidioController
-from src.services.presidio_service import PresidioService
-from src.services.file_processor import FileProcessor
+from src.controllers.api_controller import ApiController
+from src.services.file_service import FileService
+from src.services.anonymization_service import AnonymizationService
+from src.presidio.engine import PresidioEngine
 from src.utils.logger import setup_logger
 
 def create_app():
@@ -11,12 +12,15 @@ def create_app():
     logger = setup_logger()
     logger.info("Iniciando aplicación Presidio API con soporte multilingüe (EN/ES)")
     
+    # Initialize core engine
+    presidio_engine = PresidioEngine()
+    
     # Initialize services
-    presidio_service = PresidioService()
-    file_processor = FileProcessor()
+    file_service = FileService()
+    anonymization_service = AnonymizationService(presidio_engine, file_service)
     
     # Initialize controller
-    controller = PresidioController(presidio_service, file_processor, logger)
+    controller = ApiController(anonymization_service, logger)
     
     # Register routes
     controller.register_routes(app)

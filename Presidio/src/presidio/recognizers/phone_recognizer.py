@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple, Dict, Any
 from presidio_analyzer.nlp_engine import NlpArtifacts
 
 # Importamos la clase ColombianIDRecognizer
-from .recognizer_co_identity_number import ColombianIDRecognizer
+from src.presidio.recognizers.co_identity_recognizer import ColombianIDRecognizer
 
 
 class PhoneRecognizer(PatternRecognizer):
@@ -147,8 +147,6 @@ class PhoneRecognizer(PatternRecognizer):
                 score = 0.85
                 return True, score
             
-            # Ajustar score según características
-            
             # Si tiene la longitud típica de un número completo (10-12 dígitos)
             if 10 <= len(clean_number) <= 12:
                 score += 0.1
@@ -184,7 +182,7 @@ class PhoneRecognizer(PatternRecognizer):
         context_end = min(len(text), end + 50)
         context_text = text[context_start:context_end].lower()
         
-        # 0. Verificar palabras clave de teléfonos en el contexto (prioridad alta)
+        # Verificar palabras clave de teléfonos en el contexto (prioridad alta)
         phone_strong_indicators = [
             "mi número es", "mi numero es", "mi whatsapp", "mi cel es",
             "llamar al", "contactar al", "comunícate al", "escribir al",
@@ -196,7 +194,7 @@ class PhoneRecognizer(PatternRecognizer):
                 # Si hay términos muy específicos de teléfono, es casi seguro que no es un documento
                 return False
         
-        # 1. Verificar palabras clave de documentos en el contexto
+        # Verificar palabras clave de documentos en el contexto
         document_indicators = [
             "cédula", "cedula", "c.c.", "cc ", "cc:", "c c", "c. c.",
             "documento", "identidad", "identificación", "identificacion",
@@ -210,13 +208,13 @@ class PhoneRecognizer(PatternRecognizer):
                 # Si hay términos muy específicos de documentos, es casi seguro que no es un teléfono
                 return True
         
-        # 2. Consultar al reconocedor de documentos para analizar el contexto
+        # Consultar al reconocedor de documentos para analizar el contexto
         context_score, doc_type = self.colombian_id_recognizer.analyze_id_context(text, start, end)
         if context_score > 0 and doc_type != "UNKNOWN":
             # Si el contexto indica que es un documento, no es un teléfono
             return True
         
-        # 3. Verificar si el formato coincide con un documento colombiano típico
+        # Verificar si el formato coincide con un documento colombiano típico
         # Verificar validez como documento usando el validador del reconocedor colombiano
         is_valid_doc, _ = self.colombian_id_recognizer.validate_result(match_text)
         if is_valid_doc:
@@ -348,14 +346,3 @@ class PhoneRecognizer(PatternRecognizer):
             enhanced_results.append(enhanced_result)
             
         return enhanced_results
-
-
-# Función auxiliar para crear una instancia del reconocedor
-def create_phone_recognizer() -> PhoneRecognizer:
-    """
-    Crea una instancia del reconocedor de teléfonos optimizado.
-    
-    Returns:
-        PhoneRecognizer: Instancia del reconocedor
-    """
-    return PhoneRecognizer()

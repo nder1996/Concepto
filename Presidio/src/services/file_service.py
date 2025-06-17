@@ -5,7 +5,8 @@ import pytesseract
 import io
 from typing import BinaryIO
 
-class FileProcessor:
+class FileService:
+    """Servicio para procesar diferentes tipos de archivos y extraer texto."""
     
     @staticmethod
     def extract_text_from_pdf(file_content: bytes) -> str:

@@ -158,7 +158,7 @@ class EmailRecognizer(PatternRecognizer):
         Returns:
             Tuple[bool, float]: (es_válido, score_ajustado)
         """
-        # Corregir el error: verificar si pattern_match es un objeto Match
+        # Verificar si pattern_match es un objeto Match
         try:
             # Si es un objeto Match, obtener el texto del match
             if hasattr(pattern_match, 'group'):
