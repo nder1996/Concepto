@@ -41,7 +41,7 @@ class AnonymizationService:
         self.logger.info(f"Contenido: '{text[:100]}{'...' if len(text) > 100 else ''}'")
         
         # Delegar al motor de Presidio
-        results = self.presidio_engine.analyze_text(text, language)
+        results = self.presidio_engine.analyze(text, language)
         
         # Añadir el texto específico de cada entidad a los resultados
         for entity in results:
@@ -65,7 +65,8 @@ class AnonymizationService:
         self.logger.info(f"Contenido: '{text[:100]}{'...' if len(text) > 100 else ''}'")
         
         # Delegar al motor de Presidio
-        anonymized_text = self.presidio_engine.anonymize_text(text, language)
+        result = self.presidio_engine.anonymize(text, language)
+        anonymized_text = result["text"] if isinstance(result, dict) else result
         
         self.logger.info(f"Longitud del texto anonimizado: {len(anonymized_text)} caracteres")
         self.logger.info(f"Contenido anonimizado: '{anonymized_text[:100]}{'...' if len(anonymized_text) > 100 else ''}'")
