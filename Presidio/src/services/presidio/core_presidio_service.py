@@ -7,7 +7,7 @@ y no debe ser modificada frecuentemente.
 
 from typing import List, Dict, Any, Optional
 try:
-    from presidio_analyzer import AnalyzerEngine
+    from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
     from presidio_anonymizer import AnonymizerEngine
     from presidio_anonymizer.entities import OperatorConfig
 except ImportError:
@@ -20,7 +20,8 @@ from src.config.settings import (
     SUPPORTED_ENTITY_TYPES,
     ENTITY_REPLACEMENT_LABELS,
     DEFAULT_LANGUAGE,
-    SUPPORTED_LANGUAGES
+    SUPPORTED_LANGUAGES,
+    FLAIR_CONFIDENCE_THRESHOLD
 )
 
 
@@ -38,9 +39,19 @@ class CorePresidioService:
         Args:
             flair_service: Servicio opcional de Flair para validación adicional
         """
-        self.analyzer = AnalyzerEngine()
-        self.anonymizer = AnonymizerEngine()
         self.logger = setup_logger("CorePresidioService")
+        
+        # Inicializar el registro de reconocedores
+        self.logger.info("Configurando reconocedores...")
+        self.registry = RecognizerRegistry()
+        self.registry.load_predefined_recognizers()
+        
+        # Registrar reconocedores personalizados
+        self._register_custom_recognizers()
+        
+        # Inicializar motor analizador con los reconocedores registrados
+        self.analyzer = AnalyzerEngine(registry=self.registry)
+        self.anonymizer = AnonymizerEngine()
         
         # Configuración centralizada
         self.supported_languages = SUPPORTED_LANGUAGES
@@ -51,94 +62,19 @@ class CorePresidioService:
         # Integración con Flair (opcional)
         self.flair_service = flair_service
         self.flair_disponible = flair_service is not None
+        self.logger.info(f"Servicio inicializado. Flair: {'Disponible' if self.flair_disponible else 'No disponible'}")
 
-    def validate_person_entities(self, text: str, language: str) -> List[Dict[str, Any]]:
-        """
-        Valida entidades PERSON con Flair si está disponible
-
-        Args:
-            text: Texto a analizar
-            language: Idioma del texto
-
-        Returns:
-            Lista de entidades PERSON validadas
-        """
-        if not self.flair_disponible:
-            self.logger.warning(
-                "Flair no está disponible para validación de personas. Usando solo Presidio"
-            )
-            # Analizar solo para entidades PERSON utilizando el método estándar
-            analyzer_results = self.analyzer.analyze(
-                text=text, 
-                language=language,
-                entities=["PERSON"]
-            )
-            
-            # Filtrar por umbral
-            if language not in ENTITY_THRESHOLDS:
-                language = DEFAULT_LANGUAGE
-            
-            thresholds = ENTITY_THRESHOLDS[language]
-            default_threshold = thresholds.get('DEFAULT', 0.70)
-            person_threshold = thresholds.get('PERSON', default_threshold)
-            
-            filtered_results = []
-            for result in analyzer_results:
-                if result.score >= person_threshold:
-                    entity_dict = {
-                        'start': result.start,
-                        'end': result.end,
-                        'score': result.score,
-                        'entity_type': result.entity_type,
-                        'analysis_explanation': result.analysis_explanation,
-                        'text': text[result.start:result.end]
-                    }
-                    filtered_results.append(entity_dict)
-            
-            return filtered_results
-
-        # Si Flair está disponible, utilizar servicio de Flair para mejorar precisión
+    def _register_custom_recognizers(self):
+        """Registra los reconocedores personalizados"""
         try:
-            # Obtener candidatos con Presidio con umbral bajo
-            analyzer_results = self.analyzer.analyze(
-                text=text, 
-                language=language,
-                entities=["PERSON"]
-            )
+            from src.services.presidio.recognizers import EmailRecognizer, PhoneRecognizer, ColombianIDRecognizer
             
-            presidio_candidates = []
-            for result in analyzer_results:
-                entity_dict = {
-                    'start': result.start,
-                    'end': result.end,
-                    'score': result.score,
-                    'entity_type': result.entity_type,
-                    'analysis_explanation': result.analysis_explanation,
-                    'text': text[result.start:result.end]
-                }
-                presidio_candidates.append(entity_dict)
-
-            # Validar con Flair
-            validated_entities = []
-            for entity in presidio_candidates:
-                entity_text = entity["text"]
-                # Validar con Flair
-                is_valid = self.flair_service.validate_entity(
-                    entity_text, language, "PERSON"
-                )
-
-                if is_valid:
-                    validated_entities.append(entity)
-
-            self.logger.info(
-                f"Validación con Flair: {len(presidio_candidates)} candidatos, {len(validated_entities)} validados"
-            )
-            return validated_entities
-
+            self.registry.add_recognizer(EmailRecognizer())
+            self.registry.add_recognizer(PhoneRecognizer())
+            self.registry.add_recognizer(ColombianIDRecognizer())
+            self.logger.info("Reconocedores personalizados registrados correctamente")
         except Exception as e:
-            self.logger.error(f"Error en validación con Flair: {str(e)}")
-            # Caer en análisis estándar si hay error
-            return self.analyze_text(text, language)
+            self.logger.error(f"Error al registrar reconocedores personalizados: {str(e)}")
 
     def get_service_status(self) -> Dict[str, Any]:
         """
@@ -158,7 +94,8 @@ class CorePresidioService:
 
     def analyze_text(self, text: str, language: str = None, entities: List[str] = None) -> List[Dict[str, Any]]:
         """
-        Analiza un texto para detectar entidades PII
+        Analiza un texto para detectar entidades PII, usando Flair para validar
+        entidades PERSON cuando sea necesario.
 
         Args:
             text: Texto a analizar
@@ -175,100 +112,64 @@ class CorePresidioService:
         # Validar y establecer idioma
         language = language.lower() if language else self.default_language
         if language not in self.supported_languages:
-            self.logger.warning(
-                f"Idioma no soportado: {language}. Usando idioma predeterminado: {self.default_language}"
-            )
             language = self.default_language
+            self.logger.warning(f"Idioma no soportado. Usando: {language}")
 
-        # Log simplificado con información de método y datos JSON
-        import json
-        payload = {"text_length": len(text), "language": language}
-        if entities:
-            payload["entities"] = entities
-        self.logger.info(f"[analyze_text] Entrada: {json.dumps(payload)}")
-
+        self.logger.info(f"Analizando texto ({len(text)} caracteres)")
+        
         try:
-            # Verificar si necesitamos validación especial para personas
-            if self.flair_disponible and entities and "PERSON" in entities:
-                self.logger.info("Solicitada análisis específico para entidades PERSON")
-                person_entities = self.validate_person_entities(text, language)
-
-                # Si solo se solicitaron entidades PERSON, devolver solo esas
-                if len(entities) == 1:
-                    return person_entities
-
-                # Si se solicitaron más entidades, obtener el resto y combinarlas
-                other_entities = [e for e in entities if e != "PERSON"]
+            # Realizar análisis con Presidio
+            analyzer_results = self.analyzer.analyze(
+                text=text, 
+                language=language,
+                entities=entities
+            )
+            
+            # Obtener umbrales de confianza según idioma
+            thresholds = ENTITY_THRESHOLDS.get(language, ENTITY_THRESHOLDS[DEFAULT_LANGUAGE])
+            default_threshold = thresholds.get('DEFAULT', 0.70)
+            
+            # Procesar y filtrar resultados
+            filtered_results = []
+            for result in analyzer_results:
+                entity_type = result.entity_type
+                entity_text = text[result.start:result.end]
+                threshold = thresholds.get(entity_type, default_threshold)
                 
-                # Analizar con Presidio para el resto de entidades
-                analyzer_results = self.analyzer.analyze(
-                    text=text, 
-                    language=language,
-                    entities=other_entities
-                )
-                
-                # Convertir resultados a diccionario
-                other_results = []
-                
-                # Obtener umbrales para filtrado
-                if language not in ENTITY_THRESHOLDS:
-                    language = DEFAULT_LANGUAGE
-                
-                thresholds = ENTITY_THRESHOLDS[language]
-                default_threshold = thresholds.get('DEFAULT', 0.70)
-                
-                for result in analyzer_results:
-                    entity_type = result.entity_type
-                    threshold = thresholds.get(entity_type, default_threshold)
+                # Para PERSON, usar Flair si está disponible y la confianza no es muy alta
+                if entity_type == "PERSON" and self.flair_disponible and result.score < 0.85:
+                    # Validar con Flair - solo carga el modelo si es la primera validación
+                    is_valid = self.flair_service.validate_entity(entity_text, "PERSON")
                     
-                    if result.score >= threshold:
-                        entity_dict = {
-                            'start': result.start,
-                            'end': result.end,
-                            'score': result.score,
-                            'entity_type': result.entity_type,
-                            'analysis_explanation': result.analysis_explanation,
-                            'text': text[result.start:result.end]
-                        }
-                        other_results.append(entity_dict)
+                    if is_valid:
+                        # Si Flair valida, aumentar la confianza
+                        result.score = min(result.score + 0.2, 1.0)
+                    else:
+                        # Si Flair rechaza y la confianza es baja, descartar
+                        if result.score < threshold:
+                            continue
                 
-                # Combinar resultados y devolverlos
-                return person_entities + other_results
-            else:
-                # Análisis estándar con Presidio
-                analyzer_results = self.analyzer.analyze(
-                    text=text, 
-                    language=language,
-                    entities=entities
-                )
-                
-                # Convertir resultados a diccionario y filtrar por umbral
-                if language not in ENTITY_THRESHOLDS:
-                    language = DEFAULT_LANGUAGE
-                
-                thresholds = ENTITY_THRESHOLDS[language]
-                default_threshold = thresholds.get('DEFAULT', 0.70)
-                
-                filtered_results = []
-                for result in analyzer_results:
-                    entity_type = result.entity_type
-                    threshold = thresholds.get(entity_type, default_threshold)
+                # Solo incluir resultados que superen el umbral
+                if result.score >= threshold:
+                    entity_dict = {
+                        'start': result.start,
+                        'end': result.end,
+                        'score': result.score,
+                        'entity_type': entity_type,
+                        'text': entity_text
+                    }
                     
-                    if result.score >= threshold:
-                        entity_dict = {
-                            'start': result.start,
-                            'end': result.end,
-                            'score': result.score,
-                            'entity_type': result.entity_type,
-                            'analysis_explanation': result.analysis_explanation,
-                            'text': text[result.start:result.end]
-                        }
-                        filtered_results.append(entity_dict)
-                
-                return filtered_results
+                    # Agregar detalles si están disponibles
+                    if hasattr(result, 'analysis_explanation') and result.analysis_explanation:
+                        entity_dict['analysis_explanation'] = result.analysis_explanation
+                        
+                    filtered_results.append(entity_dict)
+            
+            self.logger.info(f"Entidades encontradas: {len(filtered_results)}")
+            return filtered_results
 
         except Exception as e:
-            self.logger.error(f"Error durante el análisis: {str(e)}")
+            self.logger.error(f"Error durante análisis: {str(e)}")
             return []
 
     def anonymize_text(self, text: str, language: str = None, entities: List[str] = None) -> Dict[str, Any]:
@@ -298,7 +199,7 @@ class CorePresidioService:
         analyzer_results = []
 
         for entity_dict in results:
-            # Crear un ResultRecognizer
+            # Crear un ResultRecognizer simplificado
             result = {
                 "start": entity_dict["start"],
                 "end": entity_dict["end"],
@@ -319,13 +220,11 @@ class CorePresidioService:
                 text=text, analyzer_results=analyzer_results, operators=operators
             )
 
-            self.logger.info(
-                f"Texto anonimizado correctamente. Entidades reemplazadas: {len(results)}"
-            )
+            self.logger.info(f"Texto anonimizado. Entidades reemplazadas: {len(results)}")
             return {
                 "text": anonymize_result.text,
                 "items": [dict(item) for item in anonymize_result.items],
             }
         except Exception as e:
-            self.logger.error(f"Error durante la anonimización: {str(e)}")
+            self.logger.error(f"Error durante anonimización: {str(e)}")
             return {"text": text, "items": [], "error": str(e)}
