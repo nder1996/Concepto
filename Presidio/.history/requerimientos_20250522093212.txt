@@ -1,7 +1,0 @@
-flask
-presidio-analyzer
-presidio-anonymizer
-PyPDF2
-python-docx
-pillow
-pytesseract
