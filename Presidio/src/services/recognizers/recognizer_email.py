@@ -2,7 +2,6 @@ from presidio_analyzer import PatternRecognizer, Pattern, RecognizerResult
 import re
 from typing import List, Optional, Tuple
 from presidio_analyzer.nlp_engine import NlpArtifacts
-from src.config.settings import SUPPORTED_ENTITY_TYPES
 
 class EmailRecognizer(PatternRecognizer):
     """
@@ -14,7 +13,7 @@ class EmailRecognizer(PatternRecognizer):
     """
     
     # Identificadores para el reconocedor
-    ENTITY = "EMAIL_ADDRESS" # Debe coincidir con un tipo en SUPPORTED_ENTITY_TYPES
+    ENTITY = "EMAIL_ADDRESS"
     
     # Patrones regex simplificados pero efectivos
     SIMPLE_EMAIL_PATTERN = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
@@ -102,80 +101,93 @@ class EmailRecognizer(PatternRecognizer):
                     context_text, re.IGNORECASE):
             score += 0.1
             
-        # Patrón de comunicación simplificado
-        if re.search(r'(escr[ií]b|env[ií]a).{0,20}(a|@).{0,30}' + re.escape(email_text),
-                    context_text, re.IGNORECASE):
-            score += 0.1
-            
         return min(0.3, score)
-        
-    def validate_result(self, pattern_text: str) -> bool:
+    
+    def analyze(self, text: str, entities: List[str], nlp_artifacts: NlpArtifacts = None) -> List[RecognizerResult]:
         """
-        Valida que el texto coincidente realmente tenga formato de email.
+        Analiza el texto para encontrar correos electrónicos.
         
         Args:
-            pattern_text (str): El texto del correo electrónico a validar
+            text (str): El texto a analizar
+            entities (List[str]): Lista de entidades a buscar
+            nlp_artifacts (NlpArtifacts): Artefactos NLP opcionales
             
         Returns:
-            bool: True si parece un email válido
+            List[RecognizerResult]: Lista de resultados del reconocedor
         """
-        # Validación más estricta que el patrón inicial
-        if '@' not in pattern_text:
-            return False
-            
-        local_part, domain_part = pattern_text.split('@', 1)
+        # Obtenemos los resultados base mediante patrones
+        results = super().analyze(text, entities, nlp_artifacts)
         
-        # Verificaciones básicas
-        if not local_part or not domain_part:
-            return False
-        
-        # El dominio debe tener al menos un punto
-        if '.' not in domain_part:
-            return False
-            
-        # La última parte del dominio debe tener al menos 2 caracteres
-        tld = domain_part.split('.')[-1]
-        if not tld or len(tld) < 2:
-            return False
-            
-        return True
-        
-    def analyze(
-        self, pattern_text: str, context: str = None, nlp_artifacts: NlpArtifacts = None
-    ) -> List[RecognizerResult]:
-        """
-        Analiza el texto para detectar emails y devuelve resultados con puntaje
-        enriquecido según características y contexto.
-        
-        Args:
-            pattern_text (str): El texto donde buscar emails
-            context (str, optional): Contexto. Defaults to None.
-            nlp_artifacts (NlpArtifacts, optional): Artefactos NLP. Defaults to None.
-            
-        Returns:
-            List[RecognizerResult]: Lista de resultados de reconocimiento
-        """
-        # Usar el análisis base de la clase padre
-        results = super().analyze(pattern_text, context, nlp_artifacts)
-        
-        # Enriquecer cada resultado
+        enhanced_results = []
         for result in results:
-            # Extraer el texto coincidente
-            matched_text = pattern_text[result.start:result.end]
+            # Extraer el texto del correo detectado
+            start, end = result.start, result.end
+            email_text = text[start:end]
             
-            # Validación adicional
-            if not self.validate_result(matched_text):
-                continue
+            # Contexto simplificado (10 caracteres antes y después)
+            context_start = max(0, start - 10)
+            context_end = min(len(text), end + 10)
+            context_text = text[context_start:context_end]
+            
+            # Calcular scores adicionales
+            base_score = self.enhance_signature_score(email_text)
+            context_score = self.analyze_email_context(context_text, email_text)
+            
+            # Combinar scores
+            enhanced_score = min(1.0, result.score + base_score + context_score)
+            
+            # Crear resultado mejorado
+            enhanced_result = RecognizerResult(
+                entity_type=result.entity_type,
+                start=result.start,
+                end=result.end,
+                score=enhanced_score,
+                analysis_explanation=result.analysis_explanation
+            )
+            enhanced_results.append(enhanced_result)
+            
+        return enhanced_results
+        
+    def validate_result(self, pattern_match) -> Tuple[bool, float]:
+        """
+        Validación adicional para reducir falsos positivos.
+        
+        Args:
+            pattern_match: El match del patrón
+            
+        Returns:
+            Tuple[bool, float]: (es_válido, score_ajustado)
+        """
+        # Corregir el error: verificar si pattern_match es un objeto Match
+        try:
+            # Si es un objeto Match, obtener el texto del match
+            if hasattr(pattern_match, 'group'):
+                match_text = pattern_match.group(0)
+            # Si es un string, usarlo directamente
+            elif isinstance(pattern_match, str):
+                match_text = pattern_match
+            else:
+                return False, 0.0
                 
-            # Mejorar el score según características del email
-            signature_score = self.enhance_signature_score(matched_text)
-            
-            # Mejorar score según contexto si está disponible
-            context_score = 0.0
-            if context:
-                context_score = self.analyze_email_context(context, matched_text)
+            # Verificaciones básicas
+            if '@' not in match_text:
+                return False, 0.0
                 
-            # Aumentar el score final (sin exceder 1.0)
-            result.score = min(1.0, result.score + signature_score + context_score)
+            # Verificar caracteres inválidos
+            if re.search(r'[\s\(\)\[\]\{\}<>\\"]', match_text):
+                return False, 0.0
+                
+            # Verificar longitud
+            if len(match_text) < 6 or len(match_text) > 254:
+                return False, 0.0
             
-        return results
+            # Verificar dominio simplificado
+            domain = match_text.split('@')[-1]
+            if not ('.' in domain):
+                return False, 0.0
+            
+            return True, 0.7
+            
+        except Exception:
+            # En caso de cualquier error, considerar inválido
+            return False, 0.0
