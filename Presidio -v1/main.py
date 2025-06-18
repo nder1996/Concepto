@@ -3,7 +3,6 @@ from src.controllers.presidio_controller import PresidioController
 from src.services.presidio_service import PresidioService
 from src.services.file_processor import FileProcessor
 from src.utils.logger import setup_logger
-from src.utils.custom_recognizers import log_active_recognizers
 
 def create_app():
     app = Flask(__name__)
@@ -11,9 +10,6 @@ def create_app():
     # Setup logger
     logger = setup_logger()
     logger.info("Iniciando aplicación Presidio API")
-    
-    # Mostrar reconocedores activos en los logs
-    log_active_recognizers(logger)
     
     # Initialize services
     presidio_service = PresidioService()

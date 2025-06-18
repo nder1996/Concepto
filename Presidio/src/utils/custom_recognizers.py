@@ -1,7 +1,9 @@
-from presidio_analyzer import PatternRecognizer, Pattern, RecognizerResult
+from presidio_analyzer import PatternRecognizer, Pattern, RecognizerResult, RecognizerRegistry
 import re
 from typing import List, Optional, Tuple, Dict, Any
 from presidio_analyzer.nlp_engine import NlpArtifacts
+from src.config.entity_config import TARGET_ENTITIES, ENTITY_THRESHOLDS_ES, ENTITY_THRESHOLDS_EN
+from src.config.entity_config import TARGET_ENTITIES
 
 
 class ColombianIDRecognizer(PatternRecognizer):
@@ -17,21 +19,14 @@ class ColombianIDRecognizer(PatternRecognizer):
     - Registro Civil (RC)
     - NIT (para empresas)
     - Permiso Especial de Permanencia (PEP)
-    - Visa colombiana
-    
-    Los documentos pueden contener tanto números como letras, permitiendo formatos como:
-    - C.C. 2333I344 (combinación de números y letras)
-    
-    También es capaz de detectar documentos en contextos complejos como:
-    - "Mi cédula es 30293834 y pasaporte 394848"
-    - "Tengo tarjeta de identidad 1234567890 y registro civil 9876543210"
-    - Frases con múltiples documentos mencionados en secuencia
     """
     
     # Identificador para el reconocedor
-    ENTITY = "CO_ID_NUMBER"
-      # Patrones de documentos de identidad compilados para mayor eficiencia
-    DOCUMENT_PATTERNS = {        "CC": {
+    ENTITY = "COLOMBIAN_ID_DOC"
+    
+    # Patrones de documentos de identidad compilados para mayor eficiencia
+    DOCUMENT_PATTERNS = {
+        "CC": {
             "regex": re.compile(r"(?:"
                       # Cédula de ciudadanía con variantes completas
                       r"(?:(?:cedula|cédula)(?:\s+de\s+ciudadan[ií]a)?)|"
@@ -48,7 +43,8 @@ class ColombianIDRecognizer(PatternRecognizer):
             "max_digits": 10,
             "allow_letters": True,
             "score": 0.9
-        },        "TI": {
+        },
+        "TI": {
             "regex": re.compile(r"(?:"
                       # Tarjeta de identidad con variantes completas - más restrictivo
                       r"(?:(?:tarjeta)(?:\s+de\s+identidad))|"
@@ -67,7 +63,8 @@ class ColombianIDRecognizer(PatternRecognizer):
             "max_digits": 11,
             "allow_letters": True,
             "score": 0.9
-        },        "CE": {
+        },
+        "CE": {
             "regex": re.compile(r"(?:"
                       # Cédula de extranjería con variantes completas
                       r"(?:(?:cedula|cédula)(?:\s+de\s+extranjer[ií]a)?)|"
@@ -86,7 +83,8 @@ class ColombianIDRecognizer(PatternRecognizer):
             "max_digits": 8,
             "allow_letters": True,
             "score": 0.9
-        },        "RC": {
+        },
+        "RC": {
             "regex": re.compile(r"(?:"
                       # Registro civil con variantes completas
                       r"(?:registro\s+(?:civil|de\s+nacimiento))|"
@@ -105,7 +103,8 @@ class ColombianIDRecognizer(PatternRecognizer):
             "max_digits": 11,
             "allow_letters": True,
             "score": 0.9
-        },"PA": {
+        },
+        "PA": {
             "regex": re.compile(r"(?:"
                       # Pasaporte con variantes completas
                       r"(?:pasaporte)|"
@@ -122,7 +121,8 @@ class ColombianIDRecognizer(PatternRecognizer):
                       r")(?:\s*#?\s*|\s*:\s*|\s*-\s*|\s+|\s*numero\s*|\s*n[uú]mero\s*)?([A-Za-z0-9]{6,8})", re.IGNORECASE),
             "pattern": r"^[A-Za-z0-9]{6,8}$",
             "score": 0.9
-        },        "NIT": {
+        },
+        "NIT": {
             "regex": re.compile(r"(?:"
                       # NIT con variantes completas
                       r"(?:numero\s+de\s+identificacion\s+tributaria)|"
@@ -171,7 +171,8 @@ class ColombianIDRecognizer(PatternRecognizer):
             "score": 0.95
         }
     }
-      # Patrones de contexto compilados para mayor eficiencia
+    
+    # Patrones de contexto compilados para mayor eficiencia
     CONTEXT_PATTERNS = [
         # Cédula de Ciudadanía - CC
         (re.compile(r"(?:"
@@ -290,30 +291,8 @@ class ColombianIDRecognizer(PatternRecognizer):
                   r")", re.IGNORECASE), 0.2, "ID"),
     ]
     
-    # Patrones de teléfono compilados para mayor eficiencia
-    PHONE_PATTERNS = re.compile(
-        r"tel[eéè]fono|"
-        r"\btel\b|"
-        r"celular|"
-        r"móvil|"
-        r"movil|"
-        r"llamar|"
-        r"llamame|"
-        r"comunica|"
-        r"contacta|"
-        r"whatsapp|"
-        r"comunicarse|"
-        r"contacto|"
-        r"línea|"
-        r"linea",
-        re.IGNORECASE
-    )
-    
-    # Patrones de teléfono colombiano compilados para mayor eficiencia
-    COLOMBIAN_PHONE_PATTERN = re.compile(
-        r"(?:\+57|57)?\s*(?:3\d{2}[\s-]?\d{3}[\s-]?\d{4}|\d{3}[\s-]?\d{4})",
-        re.IGNORECASE
-    )
+    # Lista de palabras comunes que podrían ser falsamente detectadas como documentos
+    COMMON_WORDS = []
     
     def __init__(
         self,
@@ -345,10 +324,10 @@ class ColombianIDRecognizer(PatternRecognizer):
         super().__init__(
             supported_entity=supported_entity,
             patterns=patterns,
-            context=context,            supported_language=supported_language,
+            context=context,
+            supported_language=supported_language,
             name=name,
-        )      # Lista de palabras comunes que podrían ser falsamente detectadas como documentos
-    COMMON_WORDS = []
+        )
     
     def validate_result(self, pattern_match) -> Tuple[bool, float]:
         """
@@ -385,7 +364,8 @@ class ColombianIDRecognizer(PatternRecognizer):
                 
             # Limpiar el número (quitar espacios, guiones y puntos)
             clean_id = re.sub(r'[\s\-\.]', '', id_number)
-              # Verificar si hay indicador claro de tipo de documento - más restrictivo con límites de palabra
+            
+            # Verificar si hay indicador claro de tipo de documento - más restrictivo con límites de palabra
             has_doc_indicator = re.search(
                 r'(?:\bc[eé]dula\b|\bc\.?c\.?\b|\btarjeta\b|\bt\.?i\.?\b|\bregistro\b|\br\.?c\.?\b|'
                 r'\bextranjer[ií]a\b|\bc\.?e\.?\b|\bpasaporte\b|\bpa\.?\b|\bnit\b|\bn\.?i\.?t\.?\b|'
@@ -397,103 +377,18 @@ class ColombianIDRecognizer(PatternRecognizer):
             # Sin indicador claro, asignamos un score bajo para evitar falsos positivos
             base_score = 0.75 if has_doc_indicator else 0.4
             
-            # Si no hay indicador claro y parece un teléfono, rechazarlo
-            if not has_doc_indicator:
-                # Verificar si tiene formato de celular colombiano (3XX-XXX-XXXX)
-                if (len(clean_id) == 10 and clean_id.startswith('3') and clean_id.isdigit()):
-                    return False, 0.0
-                
-                # Verificar si tiene formato de teléfono fijo (7 dígitos)
-                if len(clean_id) == 7 and clean_id.isdigit():
-                    return False, 0.0
-                
-                # Verificar prefijos de teléfono internacional
-                if re.search(r'^(?:\+57|57|03)', clean_id):
-                    return False, 0.0
-                
-                # Verificar formato internacional general
-                if re.search(r'^\+\d{1,3}\s?\d+', clean_id):
-                    return False, 0.0
-            
             # Debe contener al menos un dígito o una letra
             if not re.search(r'[\dA-Za-z]', clean_id):
                 return False, 0.0
-                  # Verificar longitud y formato según tipo de documento
-            num_chars = len(clean_id)
             
-            # Determinar tipo de documento a partir del contexto
-            doc_type = "UNKNOWN"
-            
-            # Buscar indicadores de tipo específico de documento
-            cc_indicator = re.search(r'c[eé]dula\s+(?:de\s+)?ciudadan[ií]a|c\.?c\.?', match_text.lower())
-            ti_indicator = re.search(r'tarjeta\s+(?:de\s+)?identidad|t\.?i\.?', match_text.lower())
-            ce_indicator = re.search(r'c[eé]dula\s+(?:de\s+)?extranjer[ií]a|c\.?e\.?', match_text.lower())
-            rc_indicator = re.search(r'registro\s+civil|r\.?c\.?', match_text.lower())
-            pa_indicator = re.search(r'pasaporte|pa\.?', match_text.lower())
-            nit_indicator = re.search(r'nit|n\.?i\.?t\.?', match_text.lower())
-            
-            # Asignar tipo según indicadores
-            if cc_indicator:
-                doc_type = "CC"
-                # Verificar longitud de cédula (7-10 caracteres)
-                if not (7 <= num_chars <= 10):
-                    return False, 0.0
-            elif ti_indicator:
-                doc_type = "TI"
-                # Verificar longitud de tarjeta de identidad (10-11 caracteres)
-                if not (10 <= num_chars <= 11):
-                    return False, 0.0
-            elif ce_indicator:
-                doc_type = "CE"
-                # Verificar longitud de cédula de extranjería (6-8 caracteres)
-                if not (5 <= num_chars <= 8):
-                    return False, 0.0
-            elif rc_indicator:
-                doc_type = "RC"
-                # Verificar longitud de registro civil (10-11 caracteres)
-                if not (10 <= num_chars <= 11):
-                    return False, 0.0
-            elif pa_indicator:
-                doc_type = "PA"
-                # Verificar formato de pasaporte (longitud adecuada)
-                if not (6 <= num_chars <= 7):
-                    return False, 0.0
-            elif nit_indicator:
-                doc_type = "NIT"
-                # Verificar longitud de NIT (9-11 caracteres incluyendo dígito de verificación)
-                if not (9 <= num_chars <= 11):
-                    return False, 0.0
-            else:
-                # Si no hay indicador específico, verificar longitudes estándar
-                if num_chars < 6 or num_chars > 12:
-                    return False, 0.0
-            
-            # Verificar características adicionales para aumentar la confianza
-            # Presencia de indicadores de documento aumenta el score
-            score_adjustments = 0.0
-            
-            # Si el formato tiene puntos como separadores (ejemplo: 1.234.567) 
-            if re.search(r'\d{1,3}\.\d{3}(\.\d{3})?', match_text):
-                score_adjustments += 0.15
-                
-            # Si el número está precedido por tipo de documento
-            if has_doc_indicator:
-                score_adjustments += 0.15
-                
-            # Si hay dos puntos o igual antes del número
-            if re.search(r'[:=]', match_text):
-                score_adjustments += 0.1
-                
-            # Si el formato incluye frases posesivas (mi cédula, su cédula)
-            if re.search(r'(?:mi|su|tu|la|el|este|esta|ese|esa)\s+(?:c[eé]dula|tarjeta|registro|pasaporte|documento)', match_text.lower()):
-                score_adjustments += 0.2
-              # Identificar tipo de documento a partir del texto
+            # Identificar tipo de documento a partir del texto
             doc_type = self._identify_document_type(match_text.lower())
             
             # Validar según el tipo identificado
             if doc_type and doc_type in self.DOCUMENT_PATTERNS:
                 pattern_info = self.DOCUMENT_PATTERNS[doc_type]
-                  # Validación de pasaporte (formato especial)
+                
+                # Validación de pasaporte (formato especial)
                 if doc_type == "PA" and "pattern" in pattern_info:
                     # Para pasaportes podemos ser más flexibles con el formato
                     if not (6 <= len(clean_id) <= 7):
@@ -541,7 +436,8 @@ class ColombianIDRecognizer(PatternRecognizer):
             
         Returns:
             Optional[str]: Tipo de documento o None si no se identifica
-        """        # Buscar coincidencias en el texto para cada tipo de documento
+        """
+        # Buscar coincidencias en el texto para cada tipo de documento
         for doc_type, pattern_info in self.DOCUMENT_PATTERNS.items():
             if re.search(pattern_info["regex"].pattern, text, re.IGNORECASE):
                 return doc_type
@@ -569,11 +465,6 @@ class ColombianIDRecognizer(PatternRecognizer):
         close_context_start = max(0, start - 30)
         close_context_end = min(len(text), end + 15)
         close_context = text[close_context_start:close_context_end].lower()
-        
-        # Descartar si es claramente contexto de teléfono sin indicador de documento
-        if (self.PHONE_PATTERNS.search(close_context) and 
-            not re.search(r'(?:c[eé]dula|cc|ti|ce|rc|nit|pep|pasaporte|documento)', close_context)):
-            return -1.0, "NOT_DOCUMENT"
         
         # Patrones lingüísticos fuertes (expresiones directas sobre documentos)
         strong_patterns = [
@@ -649,15 +540,12 @@ class ColombianIDRecognizer(PatternRecognizer):
             # Extraer el texto identificado
             start, end = result.start, result.end
             id_text = text[start:end]
-              # Verificar contexto extendido para detectar teléfonos y palabras comunes
+            
+            # Verificar contexto extendido para detectar palabras comunes
             extended_start = max(0, start - 50)
             extended_end = min(len(text), end + 50)
             extended_context = text[extended_start:extended_end].lower()
             
-            # Descartar si es claramente un teléfono por contexto y formato
-            if self.PHONE_PATTERNS.search(extended_context) and self.COLOMBIAN_PHONE_PATTERN.search(id_text):
-                continue
-                
             # Verificar si el texto coincide con alguna palabra común (falso positivo)
             detected_text = text[start:end].lower()
             if any(common_word.lower() in detected_text for common_word in self.COMMON_WORDS):
@@ -709,7 +597,8 @@ class ColombianIDRecognizer(PatternRecognizer):
                 if re.search(pattern, extended_context, re.IGNORECASE):
                     context_score += 0.15
                     break
-              # Descartar si el contexto indica que no es documento
+            
+            # Descartar si el contexto indica que no es documento
             if context_score < 0 or doc_type == "NOT_DOCUMENT":
                 continue
             
@@ -728,10 +617,11 @@ class ColombianIDRecognizer(PatternRecognizer):
             # Descartar si el score final es bajo
             if final_score < min_score:
                 continue
-            
-            # Crear resultado mejorado con tipo de documento
+              # Crear resultado mejorado con tipo de documento
             entity_type = f"{self.ENTITY}_{doc_type}" if doc_type != "UNKNOWN" else self.ENTITY
             
+            # Añadir tanto la entidad específica como la entidad base para asegurar la detección
+            # Primero añadir la entidad específica con el score completo
             enhanced_results.append(RecognizerResult(
                 entity_type=entity_type,
                 start=result.start,
@@ -739,6 +629,16 @@ class ColombianIDRecognizer(PatternRecognizer):
                 score=final_score,
                 analysis_explanation=result.analysis_explanation
             ))
+            
+            # Añadir también la entidad base para asegurar compatibilidad con filtros
+            if doc_type != "UNKNOWN":
+                enhanced_results.append(RecognizerResult(
+                    entity_type=self.ENTITY,
+                    start=result.start,
+                    end=result.end,
+                    score=final_score - 0.05,  # Ligera reducción para priorizar la entidad específica
+                    analysis_explanation=result.analysis_explanation
+                ))
         
         return enhanced_results
 
@@ -752,7 +652,8 @@ def create_colombian_recognizers() -> List[PatternRecognizer]:
     """
     # Reconocedor principal que maneja todos los tipos de documentos
     main_recognizer = ColombianIDRecognizer()
-      # Para compatibilidad con código existente, crear reconocedores individuales
+    
+    # Para compatibilidad con código existente, crear reconocedores individuales
     recognizers = [main_recognizer]
     
     # Mapa de tipos de documento y sus configuraciones
@@ -781,3 +682,71 @@ def create_colombian_recognizers() -> List[PatternRecognizer]:
         ))
     
     return recognizers
+
+
+def register_custom_recognizers(registry: RecognizerRegistry) -> None:
+    """
+    Registra los reconocedores personalizados en el registro de Presidio.
+    
+    Args:
+        registry: El registro de Presidio donde se añadirán los reconocedores
+    """
+    # Crear instancia del reconocedor de documentos colombianos
+    colombian_id_recognizer = ColombianIDRecognizer()
+    
+    # Obtener reconocedores individuales por tipo de documento
+    colombian_recognizers = create_colombian_recognizers()
+    
+    # Registrar primero el reconocedor principal para asegurar prioridad
+    #print(f"Registrando reconocedor principal: {colombian_id_recognizer.ENTITY}")
+    registry.add_recognizer(colombian_id_recognizer)
+      # Registrar reconocedores individuales para tipos específicos de documentos
+    # para mayor granularidad en la detección
+    for recognizer in colombian_recognizers[1:]:  # Saltamos el primero porque ya lo agregamos arriba
+        # Los PatternRecognizer tienen la propiedad supported_entities (en plural) o entity_types, no supported_entity
+        #if hasattr(recognizer, 'supported_entities'):
+            #print(f"Registrando reconocedor: {recognizer.supported_entities}")
+        #elif hasattr(recognizer, 'entity_types'):
+            #print(f"Registrando reconocedor: {recognizer.entity_types}")
+        #else:
+            #print(f"Registrando reconocedor (tipo desconocido): {type(recognizer).__name__}")
+        registry.add_recognizer(recognizer)
+    
+    # Cargar reconocedores predefinidos para español e inglés
+    registry.load_predefined_recognizers(languages=["es", "en"])
+
+def get_active_recognizers() -> List[str]:
+    """
+    Retorna una lista de los reconocedores activos definidos en la configuración.
+    
+    Returns:
+        List[str]: Lista de nombres de entidades/reconocedores activos.
+    """
+    return TARGET_ENTITIES
+
+def log_active_recognizers(logger) -> None:
+    """
+    Registra en el logger la lista de reconocedores activos en la aplicación 
+    junto con sus umbrales de confianza para los idiomas soportados.
+    
+    Args:
+        logger: Instancia del logger configurado
+    """
+    recognizers = get_active_recognizers()
+    logger.info(f"===== RECONOCEDORES ACTIVOS EN LA APLICACIÓN: {len(recognizers)} =====")
+    
+    # Mostrar la lista de reconocedores obtenidos de TARGET_ENTITIES con sus umbrales
+    for recognizer in recognizers:
+        # Obtener umbrales para español e inglés
+        es_threshold = ENTITY_THRESHOLDS_ES.get(recognizer, "N/A")
+        en_threshold = ENTITY_THRESHOLDS_EN.get(recognizer, "N/A")
+        
+        # Determinamos si es un reconocedor estándar o personalizado
+        tipo = "personalizado" if recognizer == "COLOMBIAN_ID_DOC" else "estándar de Presidio"
+        
+        # Mostramos el reconocedor y sus umbrales
+        logger.info(f"  - {recognizer} (Reconocedor {tipo})")
+        logger.info(f"    → Umbral ES: {es_threshold}")
+        logger.info(f"    → Umbral EN: {en_threshold}")
+    
+    logger.info("======================================================")
