@@ -1,9 +1,12 @@
 from presidio_analyzer import PatternRecognizer, Pattern, RecognizerResult, RecognizerRegistry
 import re
+import logging
 from typing import List, Optional, Tuple, Dict, Any
 from presidio_analyzer.nlp_engine import NlpArtifacts
 from src.config.entity_config import TARGET_ENTITIES, ENTITY_THRESHOLDS_ES, ENTITY_THRESHOLDS_EN
-from src.config.entity_config import TARGET_ENTITIES
+# Evitamos importación redundante
+# from src.config.entity_config import TARGET_ENTITIES
+import importlib
 
 
 class ColombianIDRecognizer(PatternRecognizer):
@@ -691,6 +694,11 @@ def register_custom_recognizers(registry: RecognizerRegistry) -> None:
     Args:
         registry: El registro de Presidio donde se añadirán los reconocedores
     """
+    # PRIMERO: Cargar los reconocedores predefinidos para español e inglés
+    # Esto asegura que LOCATION y otros reconocedores estándar estén disponibles
+    registry.load_predefined_recognizers(languages=["es", "en"])
+    
+    # SEGUNDO: Registrar reconocedores personalizados
     # Crear instancia del reconocedor de documentos colombianos
     colombian_id_recognizer = ColombianIDRecognizer()
     
@@ -698,22 +706,23 @@ def register_custom_recognizers(registry: RecognizerRegistry) -> None:
     colombian_recognizers = create_colombian_recognizers()
     
     # Registrar primero el reconocedor principal para asegurar prioridad
-    #print(f"Registrando reconocedor principal: {colombian_id_recognizer.ENTITY}")
     registry.add_recognizer(colombian_id_recognizer)
-      # Registrar reconocedores individuales para tipos específicos de documentos
-    # para mayor granularidad en la detección
-    for recognizer in colombian_recognizers[1:]:  # Saltamos el primero porque ya lo agregamos arriba
-        # Los PatternRecognizer tienen la propiedad supported_entities (en plural) o entity_types, no supported_entity
-        #if hasattr(recognizer, 'supported_entities'):
-            #print(f"Registrando reconocedor: {recognizer.supported_entities}")
-        #elif hasattr(recognizer, 'entity_types'):
-            #print(f"Registrando reconocedor: {recognizer.entity_types}")
-        #else:
-            #print(f"Registrando reconocedor (tipo desconocido): {type(recognizer).__name__}")
-        registry.add_recognizer(recognizer)
     
-    # Cargar reconocedores predefinidos para español e inglés
-    registry.load_predefined_recognizers(languages=["es", "en"])
+    # Registrar reconocedores individuales para tipos específicos de documentos
+    for recognizer in colombian_recognizers[1:]:  # Saltamos el primero porque ya lo agregamos arriba
+        registry.add_recognizer(recognizer)
+        
+    # Registrar el reconocedor de ubicaciones colombianas basado en DIVIPOLA
+    try:
+        from src.utils.location_recognizer import ColombianLocationRecognizer
+        logging.getLogger("custom_recognizers").info("Registrando reconocedor de ubicaciones DIVIPOLA")
+        registry.add_recognizer(ColombianLocationRecognizer())
+    except ImportError:
+        logging.getLogger("custom_recognizers").warning("No se pudo cargar el reconocedor de ubicaciones en colombia")
+    
+    # Registrar la lista de reconocedores activos en el log
+    active_recognizers = get_active_recognizers()
+    logging.getLogger("custom_recognizers").info(f"Reconocedores activos: {', '.join(active_recognizers)}")
 
 def get_active_recognizers() -> List[str]:
     """

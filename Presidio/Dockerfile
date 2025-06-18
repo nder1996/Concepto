@@ -19,6 +19,9 @@ RUN pip install --no-cache-dir spacy==3.5.3
 RUN python -m spacy download en_core_web_lg
 RUN python -m spacy download es_core_news_md
 
+# Forzamos la instalación de librería de países, estados y ciudades
+#RUN pip install --no-cache-dir py-countries-states-cities-database>=1.2.1
+
 COPY . /app/
 WORKDIR /app
 EXPOSE 5000
