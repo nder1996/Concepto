@@ -18,7 +18,7 @@ class ColombianIDRecognizer(PatternRecognizer):
     # Configuración detallada para cada tipo de documento
     DOCUMENT_CONFIG = {        "CC": {
             "name": "Cédula de Ciudadanía",
-            "regex": r"\b(?:c[eé]dula|cedula|c\.?\s*c\.?|c[eé]d\.?|ced\.?|documento|identificaci[oó]n|identidad|tarjeta\s+de\s+identidad)\b",
+            "regex": r"\b(?:c[eé]dula|cedula|c\.?\s*c\.?|c[eé]d\.?|ced\.?|documento|identificaci[oó]n)\b",
             "pattern": r"(?<!\w)(\d{6,12})(?!\w)",
             "context_keywords": [
                 "cédula",
@@ -29,11 +29,9 @@ class ColombianIDRecognizer(PatternRecognizer):
                 "ciudadanía",
                 "ciudadania",
                 "documento",
-                "doc",
-                "portador",
+                "doc",                "portador",
                 "identificación",
                 "identificacion",
-                "identidad",
                 "ced",
                 "céd",
                 "número",
@@ -46,11 +44,9 @@ class ColombianIDRecognizer(PatternRecognizer):
                 "nacional",
                 "colombiano",
                 "colombiana",
-                "registraduría",
-                "registraduria",
+                "registraduría",                "registraduria",
                 "carnet",
                 "carné",
-                "tarjeta",
                 "república",
                 "republica",
                 "expedida",
@@ -67,7 +63,8 @@ class ColombianIDRecognizer(PatternRecognizer):
             "min_length": 5,  # Para capturar algunas cédulas antiguas o especiales
             "max_length": 15,  # Para capturar formatos con puntos, guiones, etc.
             "score": 0.8,  # Reducido para capturar más casos
-        },        "TI": {
+        },
+        "TI": {
             "name": "Tarjeta de Identidad",
             "regex": r"\b(?:tarjeta\s+de\s+identidad|tarjeta\s+identidad|t\.?\s*i\.?|t\s+de\s+i|ti|identidad\s+(?:de\s+)?menor|documento\s+(?:de\s+)?menor|nuip)\b",
             "pattern": r"(?<!\w)(\d{8,12})(?!\w)",
@@ -214,7 +211,8 @@ class ColombianIDRecognizer(PatternRecognizer):
 
         super().__init__(
             supported_entity=self.ENTITY,
-            patterns=patterns,            context=context,
+            patterns=patterns,
+            context=context,
             supported_language="es",
             name="ColombianIDRecognizer",
         )
@@ -225,12 +223,14 @@ class ColombianIDRecognizer(PatternRecognizer):
         for doc_type, config in self.DOCUMENT_CONFIG.items():
             # 1. Patrón para "tipo de documento seguido de número"
             # Ejemplo: "cédula 12345678", "tarjeta de identidad 123456789"
-            type_number_pattern = f"\\b{config['regex']}\\s*[:=]?\\s*{config['pattern']}"
-            
+            type_number_pattern = (
+                f"\\b{config['regex']}\\s*[:=]?\\s*{config['pattern']}"
+            )
+
             # 2. Patrón para "el/la documento es número"
             # Ejemplo: "la cédula es 12345678", "mi tarjeta de identidad es 123456789"
             document_is_pattern = f"\\b(?:mi|su|la|el|esta|este)\\s+{config['regex']}\\s+(?:es|número|num|no\\.?)\\s*[:=]?\\s*{config['pattern']}"
-            
+
             # 3. Patrón para números que aparecen cerca de palabras clave (contexto)
             # Este patrón busca números que estén cerca de las palabras de contexto
             context_number_pattern = f"\\b{config['pattern']}\\b"
@@ -256,7 +256,8 @@ class ColombianIDRecognizer(PatternRecognizer):
                 Pattern(
                     name=f"col_{doc_type.lower()}_context",
                     regex=context_number_pattern,
-                    score=config["score"] - 0.3,  # Menor confianza, necesita validación de contexto
+                    score=config["score"]
+                    - 0.3,  # Menor confianza, necesita validación de contexto
                 )
             )
         return patterns
@@ -296,52 +297,116 @@ class ColombianIDRecognizer(PatternRecognizer):
                         end=result.end,
                         score=confidence,
                         analysis_explanation=result.analysis_explanation,
-                    )                )
+                    )
+                )
 
         return enhanced_results
 
     def _validate_with_context(
         self, doc_text: str, context_text: str
     ) -> Tuple[bool, str, float]:
-        """Valida un documento con análisis de contexto simplificado"""
+        """Valida un documento con análisis de contexto mejorado para todos los tipos"""
         # Normalizar textos para comparación
         doc_text = doc_text.strip()
         context_text = context_text.lower()
 
-        # 1. Determinar tipo de documento buscando patrones conocidos
-        doc_type = None
-        best_confidence = 0.0
-        
+        # Lista de candidatos posibles (tipo, confianza)
+        candidates = []
+
+        # 1. Buscar coincidencias por regex de contexto Y patrón de formato
         for dtype, config in self.DOCUMENT_CONFIG.items():
-            # Buscar coincidencia del tipo en el contexto
-            if re.search(config["regex"], context_text, re.IGNORECASE):
-                # Validar que el número tenga un formato básico apropiado
-                if re.match(config["pattern"], doc_text, re.IGNORECASE):
-                    # Validar longitud básica
-                    if config["min_length"] <= len(doc_text) <= config["max_length"]:
-                        current_confidence = config["score"]
-                        
-                        # Aumentar confianza si hay patrones posesivos
-                        for pattern, boost in self.POSSESSIVE_PATTERNS:
-                            if pattern.search(context_text):
-                                current_confidence = min(1.0, current_confidence + boost)
-                                break
-                        
-                        # Usar el tipo con mayor confianza
-                        if current_confidence > best_confidence:
-                            doc_type = dtype
-                            best_confidence = current_confidence
+            current_confidence = 0.0
+            
+            # Verificar si el contexto menciona este tipo de documento
+            context_match = re.search(config["regex"], context_text, re.IGNORECASE)
+            
+            # Verificar si el texto coincide con el patrón del documento
+            pattern_match = re.search(config["pattern"], doc_text, re.IGNORECASE)
+            
+            # Verificar longitud
+            length_valid = config["min_length"] <= len(doc_text) <= config["max_length"]
+            
+            if context_match and pattern_match and length_valid:
+                current_confidence = config["score"]
+                
+                # Aumentar confianza si hay patrones posesivos
+                for pattern, boost in self.POSSESSIVE_PATTERNS:
+                    if pattern.search(context_text):
+                        current_confidence = min(1.0, current_confidence + boost)
+                        break
+                
+                candidates.append((dtype, current_confidence))
 
-        # Si no encontramos un tipo específico pero el número parece válido, usar CC como predeterminado
-        if not doc_type:
-            # Para números de 8-11 dígitos, asumir que es una cédula si hay contexto de identidad
-            if re.match(r'\d{8,11}', doc_text) and any(word in context_text for word in ['identidad', 'documento', 'tarjeta', 'cédula', 'cedula']):
-                doc_type = 'CC'
-                best_confidence = 0.6  # Confianza moderada
-            else:
-                return False, "", 0.0
+        # 2. Si no hay coincidencias por regex, buscar por palabras clave en contexto
+        if not candidates:
+            for dtype, config in self.DOCUMENT_CONFIG.items():
+                # Contar coincidencias de palabras clave
+                keyword_matches = sum(1 for keyword in config["context_keywords"] 
+                                    if keyword.lower() in context_text)
+                
+                if keyword_matches > 0:
+                    # Verificar patrón y longitud
+                    pattern_match = re.search(config["pattern"], doc_text, re.IGNORECASE)
+                    length_valid = config["min_length"] <= len(doc_text) <= config["max_length"]
+                    
+                    if pattern_match and length_valid:
+                        # Calcular confianza basada en palabras clave encontradas
+                        keyword_confidence = min(0.8, keyword_matches * 0.2)
+                        base_confidence = config["score"] * 0.7  # Reducir confianza base
+                        current_confidence = min(0.9, base_confidence + keyword_confidence)
+                        
+                        candidates.append((dtype, current_confidence))
 
-        return True, doc_type, best_confidence
+        # 3. Validación por formato específico sin contexto claro
+        if not candidates:
+            for dtype, config in self.DOCUMENT_CONFIG.items():
+                pattern_match = re.search(config["pattern"], doc_text, re.IGNORECASE)
+                length_valid = config["min_length"] <= len(doc_text) <= config["max_length"]
+                
+                if pattern_match and length_valid:
+                    # Confianza baja pero válida
+                    current_confidence = config["score"] * 0.4
+                    
+                    # Casos especiales por formato
+                    if dtype == "NIT" and re.match(r"\d{9,11}-?\d?", doc_text):
+                        current_confidence = 0.7  # NITs tienen formato muy específico
+                    elif dtype == "PA" and re.match(r"[A-Z]{1,2}\d{4,7}", doc_text):
+                        current_confidence = 0.7  # Pasaportes tienen formato distintivo
+                    elif dtype == "CE" and re.match(r"[A-Z]?\d{5,8}", doc_text):
+                        current_confidence = 0.6  # CE puede tener letra inicial
+                    elif dtype == "PEP" and re.match(r"[A-Z0-9]{8,15}", doc_text):
+                        current_confidence = 0.6  # PEP formato alfanumérico
+                    elif dtype == "VISA" and re.match(r"[A-Z0-9]{8,12}", doc_text):
+                        current_confidence = 0.6  # VISA formato alfanumérico
+                    
+                    candidates.append((dtype, current_confidence))
+
+        # 4. Fallback inteligente para números puros (CC, TI, RC)
+        if not candidates and re.match(r"\d+", doc_text):
+            doc_length = len(doc_text)
+            
+            # Contextual clues para determinar el tipo más probable
+            if any(word in context_text for word in ["menor", "niño", "niña", "adolescente", "estudiante"]):
+                if 8 <= doc_length <= 12:
+                    candidates.append(("TI", 0.6))
+            elif any(word in context_text for word in ["nacimiento", "civil", "registro"]):
+                if 8 <= doc_length <= 12:
+                    candidates.append(("RC", 0.6))
+            elif any(word in context_text for word in ["empresa", "tributario", "fiscal", "rut"]):
+                if 9 <= doc_length <= 12:
+                    candidates.append(("NIT", 0.7))
+              # Fallback general para cédula
+            if not candidates and any(word in context_text for word in 
+                ["documento", "cédula", "cedula", "identificación"]):
+                if 6 <= doc_length <= 12:
+                    candidates.append(("CC", 0.5))
+
+        # Seleccionar el candidato con mayor confianza
+        if candidates:
+            doc_type, best_confidence = max(candidates, key=lambda x: x[1])
+            return True, doc_type, best_confidence
+        
+        return False, "", 0.0
 
     def get_supported_entities(self) -> List[str]:
         """Devuelve todas las entidades soportadas (tipos de documentos)"""
