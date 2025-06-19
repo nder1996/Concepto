@@ -132,11 +132,8 @@ class PresidioService:
             # Determinar el umbral apropiado para la entidad
             threshold = thresholds.get(r.entity_type, 0.80)
             
-            # Incluir la entidad si está en target_entities o es una variante de COLOMBIAN_ID_DOC y supera el umbral
-            if (
-                r.entity_type in self.target_entities or
-                any(r.entity_type.startswith(e) for e in self.target_entities if e == "COLOMBIAN_ID_DOC")
-            ) and r.score >= threshold:
+            # Incluir la entidad si está en target_entities y supera el umbral
+            if r.entity_type in self.target_entities and r.score >= threshold:
                 filtered_results.append(r)
         
         # Registrar las entidades que superan el filtro

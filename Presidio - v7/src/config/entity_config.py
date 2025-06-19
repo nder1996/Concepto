@@ -38,17 +38,3 @@ THRESHOLDS_BY_LANGUAGE = {
 
 # Por compatibilidad con código existente - Configurado para usar español como predeterminado
 ENTITY_THRESHOLDS = ENTITY_THRESHOLDS_ES
-
-# Puntajes (scores) centralizados para cada tipo de documento colombiano
-DOCUMENT_SCORES = {
-    "CC": 0.4,
-    #"TI": 0.85,
-    #"PA": 0.85,
-    "CE": 0.85,
-    #"RC": 0.85,
-    #"NIT": 0.95,
-    #"PEP": 0.8,
-    #"VISA": 0.8,
-}
-# Los documentos aceptados son las claves de DOCUMENT_SCORES
-# COLOMBIAN_ID_DOC = list(DOCUMENT_SCORES.keys())  # Si necesitas la lista en otro archivo, usa esto

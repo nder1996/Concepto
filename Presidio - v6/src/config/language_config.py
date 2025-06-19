@@ -6,8 +6,6 @@ Define la configuración específica de los analizadores y modelos de lenguaje p
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from src.recognizers.registry import register_custom_recognizers
-from src.recognizers.colombian_id_recognizer import ColombianIDRecognizer
-from src.recognizers.colombian_location_recognizer import ColombianLocationRecognizer
 from src.utils.logger import setup_logger
 import importlib.util
 
@@ -33,9 +31,6 @@ LANGUAGE_MODELS = {
 SUPPORTED_LANGUAGES = list(LANGUAGE_MODELS.keys())
 DEFAULT_LANGUAGE = "es"  # Español como idioma predeterminado
 
-# Configurar logger
-logger = setup_logger("LanguageConfig")
-
 def is_spacy_model_installed(model_name):
     """
     Verifica si un modelo de spaCy está instalado.
@@ -55,6 +50,7 @@ def initialize_language_analyzers():
     Returns:
         dict: Diccionario con los analizadores configurados por idioma.
     """
+    logger = setup_logger("LanguageConfig")
     analyzers = {}
     
     logger.info("Inicializando analizadores para diferentes idiomas...")
@@ -84,26 +80,6 @@ def initialize_language_analyzers():
                 # Crear registro de reconocedores
                 registry = RecognizerRegistry()
                 register_custom_recognizers(registry, language=lang_code)
-                  # Verificar reconocedores activos para las entidades objetivo
-                from src.config.entity_config import TARGET_ENTITIES
-                recognizer_entities = []
-                for r in registry.recognizers:
-                    # Obtener entidades soportadas usando diferentes atributos posibles
-                    if hasattr(r, 'supported_entity'):
-                        recognizer_entities.append(r.supported_entity)
-                    elif hasattr(r, 'supported_entities'):
-                        recognizer_entities.extend(r.supported_entities)
-                    elif hasattr(r, 'entity_type'):
-                        recognizer_entities.append(r.entity_type)
-                    # Agregar el nombre del reconocedor como fallback
-                    if hasattr(r, 'name'):
-                        recognizer_entities.append(r.name)
-                for entity in TARGET_ENTITIES:
-                    # Considerar activo si hay coincidencia exacta o si la entidad soportada comienza con la entidad objetivo
-                    if any(e == entity or e.startswith(entity) for e in recognizer_entities):
-                        logger.info(f"Reconocedor para entidad '{entity}' está ACTIVO en idioma {lang_code}.")
-                    else:
-                        logger.warning(f"Reconocedor para entidad '{entity}' NO está activo en idioma {lang_code}.")
                 
                 # Crear analizador con el motor NLP específico
                 analyzers[lang_code] = AnalyzerEngine(
@@ -142,40 +118,3 @@ def initialize_language_analyzers():
             logger.error(f"Error crítico al crear analizador de respaldo: {str(inner_e)}")
         
     return analyzers
-
-def register_custom_recognizers(registry: RecognizerRegistry, language: str = "es") -> None:
-    """
-    Registra todos los reconocedores personalizados en el registro de Presidio.
-
-    Args:
-        registry (RecognizerRegistry): El registro donde se añadirán los reconocedores
-        language (str, optional): Idioma para el que se registrarán los reconocedores. 
-                                Por defecto es "es" (español).
-    """
-    # Registrar reconocedores solo para español
-    if language != "es":
-        logger.warning(f"Idioma {language} no soportado para reconocedores personalizados. Solo se registrarán para 'es'.")
-        return
-
-    registry.load_predefined_recognizers(languages=[language])
-
-    try:
-        colombian_id_recognizer = ColombianIDRecognizer()
-        registry.add_recognizer(colombian_id_recognizer)
-        logger.info(f"Reconocedor de documentos colombianos registrado correctamente (idioma: {language})")
-    except Exception as e:
-        logger.error(f"Error al registrar el reconocedor de documentos colombianos: {str(e)}")
-
-    try:
-        colombian_location_recognizer = ColombianLocationRecognizer(supported_language=language)
-        registry.add_recognizer(colombian_location_recognizer)
-        logger.info(f"Reconocedor de ubicaciones colombianas registrado correctamente (idioma: {language})")
-    except Exception as e:
-        logger.error(f"Error al registrar el reconocedor de ubicaciones colombianas: {str(e)}")
-
-    if not registry.recognizers:
-        logger.error("¡ALERTA! No se registraron reconocedores. El sistema puede no funcionar correctamente.")
-    else:
-        logger.info(f"Total de reconocedores registrados: {len(registry.recognizers)}")
-        recognizer_names = [f"{r.name} ({getattr(r, 'supported_entity', 'N/A')})" for r in registry.recognizers]
-        logger.debug(f"Reconocedores registrados: {', '.join(recognizer_names)}")

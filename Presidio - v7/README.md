@@ -87,15 +87,6 @@ form-data:
 - EMAIL_ADDRESS: Direcciones de correo electrónico
 - Otras entidades personalizadas
 
-## Configuración de umbrales y puntajes
-
-Todos los umbrales y puntajes de confianza para entidades y documentos colombianos se configuran en el archivo `src/config/entity_config.py`.
-
-- **Umbrales por entidad**: `ENTITY_THRESHOLDS_ES`, `ENTITY_THRESHOLDS_EN`, `THRESHOLDS_BY_LANGUAGE`
-- **Puntajes de documentos**: `DOCUMENT_SCORES`
-
-Modifica estos valores para ajustar la sensibilidad del sistema de detección y anonimización.
-
 ## Solución de problemas
 
 ### Si el texto en español no se analiza correctamente:

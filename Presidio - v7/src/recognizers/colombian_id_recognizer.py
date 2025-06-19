@@ -2,20 +2,6 @@ from presidio_analyzer import PatternRecognizer, Pattern, RecognizerResult
 import re
 from typing import List, Optional, Tuple, Dict, Any
 from presidio_analyzer.nlp_engine import NlpArtifacts
-from src.config.entity_config import DOCUMENT_SCORES
-import logging
-
-
-# Configurar el logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-# Agregar un handler de consola
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
 
 
 class ColombianIDRecognizer(PatternRecognizer):
@@ -28,17 +14,24 @@ class ColombianIDRecognizer(PatternRecognizer):
     """
 
     ENTITY = "COLOMBIAN_ID_DOC"
-    SUPPORTED_LANGUAGE = "es"  # Configuración para idioma español
 
-    # Lista de documentos habilitados ahora viene de las claves de DOCUMENT_SCORES
-    ENABLED_DOCUMENTS = list(DOCUMENT_SCORES.keys())
+    # Lista de documentos habilitados. Comenta el que NO quieras analizar.
+    ENABLED_DOCUMENTS = [
+        "CC",
+        #"TI",
+        #"PA",
+        "CE",
+        #"RC",
+        #"NIT",
+        # "PEP",  # Descomenta para desactivar PEP
+        #"VISA",
+    ]
 
     # Configuración detallada para cada tipo de documento
-    _FULL_DOCUMENT_CONFIG = {
+    DOCUMENT_CONFIG = {
         "CC": {
             "name": "Cédula de Ciudadanía",
-            "regex": r"\b(?:c[eé]dula|cedula|c\.\?\s*c\.\?|c[eé]d\.\?|ced\.\?|documento|identificaci[oó]n)\b",  # Se mantiene para compatibilidad
-            "context_number_pattern": r"\b(?:c[eé]dula|cedula|c\.\?\s*c\.\?|c[eé]d\.\?|ced\.\?|documento|identificaci[oó]n)\b(?:\W+|\s+(?:es|número|numero|no\.\?|:|de|del|es|es el|es la|es número|es numero|es no\.\?|es:|es el número|es el numero|es el no\.\?|es el:|es la número|es la numero|es la no\.\?|es la:|es un|es una|es mi|es su|es tu|es nuestro|es vuestra|es su número|es su numero|es su no\.\?|es su:|es tu número|es tu numero|es tu no\.\?|es tu:|es nuestro número|es nuestro numero|es nuestro no\.\?|es nuestro:|es vuestra número|es vuestra numero|es vuestra no\.\?|es vuestra:|es:)\s*){0,5})(\d{6,12})(?!\w)",
+            "regex": r"\b(?:c[eé]dula|cedula|c\.?\s*c\.?|c[eé]d\.?|ced\.?|documento|identificaci[oó]n)\b",
             "pattern": r"(?<!\w)(\d{6,12})(?!\w)",
             "context_keywords": [
                 "cédula",
@@ -49,6 +42,7 @@ class ColombianIDRecognizer(PatternRecognizer):
                 "cedula ciudadania",
                 "cc",
                 "c.c.",
+                "c. c.",
                 "ciudadanía",
                 "ciudadania",
                 "documento",
@@ -87,16 +81,62 @@ class ColombianIDRecognizer(PatternRecognizer):
             ],
             "min_length": 5,  # Para capturar algunas cédulas antiguas o especiales
             "max_length": 15,  # Para capturar formatos con puntos, guiones, etc.
-            "score": DOCUMENT_SCORES.get("CC", 0),
+            "score": 0.8,  # Reducido para capturar más casos
         },
         "TI": {
             "name": "Tarjeta de Identidad",
-            "regex": r"\b(?:tarjeta\s+de\s+identidad|ti(?!\w))\b",
+            "regex": r"\b(?:tarjeta\s+de\s+identidad|tarjeta\s+identidad|t\.?\s*i\.?|t\s*i\s*(?!\w)|t\s+de\s+i|ti(?!\w)|identidad\s+(?:de\s+)?menor|documento\s+(?:de\s+)?menor|nuip)\b",
             "pattern": r"(?<!\w)(\d{8,12})(?!\w)",
-            "context_keywords": ["tarjeta", "identidad", "ti"],
+            "context_keywords": [
+                "tarjeta",
+                "identidad",
+                "ti",
+                "t.i",
+                "t.i.",
+                "t. i.",
+                "t i",
+                "t de i",
+                "menor",
+                "menor de edad",
+                "joven",
+                "adolescente",
+                "niño",
+                "niña",
+                "juvenil",
+                "nuip",
+                "número único",
+                "numero unico",
+                "identificación",
+                "identificacion",
+                "documento",
+                "registro",
+                "civil",
+                "registraduría",
+                "registraduria",
+                "república",
+                "republica",
+                "colombia",
+                "colombiano",
+                "colombiana",
+                "expedida",
+                "expedido",
+                "vigente",
+                "fecha",
+                "nacimiento",
+                "lugar",
+                "expedición",
+                "expedicion",
+                "identificado",
+                "identificada",
+                "estudiante",
+                "escolar",
+                "colegio",
+                "instituto",
+                "bachiller",
+            ],
             "min_length": 8,  # Las TI tienen mínimo 8 dígitos
             "max_length": 15,  # Para incluir formatos con puntos y guiones
-            "score": DOCUMENT_SCORES.get("TI", 0),
+            "score": 0.85,  # Aumentado para dar mayor confianza
         },
         "PA": {
             "name": "Pasaporte",
@@ -105,7 +145,7 @@ class ColombianIDRecognizer(PatternRecognizer):
             "context_keywords": ["pasaporte", "pa", "internacional"],
             "min_length": 5,
             "max_length": 9,
-            "score": DOCUMENT_SCORES.get("PA", 0),
+            "score": 0.85,
         },
         "CE": {
             "name": "Cédula de Extranjería",
@@ -114,7 +154,7 @@ class ColombianIDRecognizer(PatternRecognizer):
             "context_keywords": ["extranjería", "ce", "extranjero"],
             "min_length": 5,
             "max_length": 8,
-            "score": DOCUMENT_SCORES.get("CE", 0),
+            "score": 0.85,
         },
         "RC": {
             "name": "Registro Civil",
@@ -123,7 +163,7 @@ class ColombianIDRecognizer(PatternRecognizer):
             "context_keywords": ["registro", "rc", "nacimiento"],
             "min_length": 8,
             "max_length": 12,
-            "score": DOCUMENT_SCORES.get("RC", 0),
+            "score": 0.85,
         },
         "NIT": {
             "name": "Número de Identificación Tributaria",
@@ -132,7 +172,7 @@ class ColombianIDRecognizer(PatternRecognizer):
             "context_keywords": ["nit", "tributario", "empresa"],
             "min_length": 9,
             "max_length": 12,
-            "score": DOCUMENT_SCORES.get("NIT", 0),
+            "score": 0.95,
         },
         "PEP": {
             "name": "Permiso Especial de Permanencia",
@@ -141,7 +181,7 @@ class ColombianIDRecognizer(PatternRecognizer):
             "context_keywords": ["pep", "permiso", "migración"],
             "min_length": 5,
             "max_length": 15,
-            "score": DOCUMENT_SCORES.get("PEP", 0),
+            "score": 0.8,
         },
         "VISA": {
             "name": "Visa Colombiana",
@@ -150,32 +190,9 @@ class ColombianIDRecognizer(PatternRecognizer):
             "context_keywords": ["visa", "visado", "consulado"],
             "min_length": 8,
             "max_length": 12,
-            "score": DOCUMENT_SCORES.get("VISA", 0),
+            "score": 0.8,
         },
     }
-
-    @classmethod
-    def get_active_document_config(cls):
-        """
-        Retorna solo la configuración de los documentos activos según DOCUMENT_SCORES.
-        """
-        return {k: v for k, v in cls._FULL_DOCUMENT_CONFIG.items() if k in DOCUMENT_SCORES}
-    
-    def __init__(self):
-        # Construir patrones basados en documentos activos
-        patterns = self._build_patterns()
-
-        # Validar que haya al menos un patrón válido
-        if not patterns:
-            logger.error("No se encontraron patrones válidos para los documentos activos en DOCUMENT_SCORES.")
-            raise ValueError("ColombianIDRecognizer debe inicializarse con al menos un patrón válido.")        # Inicializar el reconocedor con los patrones generados
-        super().__init__(supported_entity=self.ENTITY, patterns=patterns)
-
-        # Usar solo configuraciones activas
-        self.active_document_config = self.get_active_document_config()
-
-    # Solo incluir los documentos activos en DOCUMENT_SCORES
-    DOCUMENT_CONFIG = {k: v for k, v in _FULL_DOCUMENT_CONFIG.items() if k in list(DOCUMENT_SCORES.keys())}
 
     # Expresiones posesivas para mejorar el contexto
     POSSESSIVE_PATTERNS = [
@@ -208,6 +225,18 @@ class ColombianIDRecognizer(PatternRecognizer):
             0.3,
         ),
     ]
+
+    def __init__(self):
+        patterns = self._build_patterns()
+        context = self._build_context_words()
+
+        super().__init__(
+            supported_entity=self.ENTITY,
+            patterns=patterns,
+            context=context,
+            supported_language="es",
+            name="ColombianIDRecognizer",
+        )
 
     def _build_patterns(self) -> List[Pattern]:
         """Construye los patrones de reconocimiento para cada tipo de documento"""
@@ -287,16 +316,11 @@ class ColombianIDRecognizer(PatternRecognizer):
         self, text: str, entities: List[str], nlp_artifacts: NlpArtifacts = None
     ) -> List[RecognizerResult]:
         """Analiza el texto con contexto extendido y validación mejorada"""
-        logger.debug(f"Texto recibido para análisis: {text}")
-        logger.debug(f"Entidades solicitadas: {entities}")
         base_results = super().analyze(text, entities, nlp_artifacts)
-        logger.debug(f"Resultados base detectados: {base_results}")
-        
         enhanced_results = []
 
         for result in base_results:
             detected_text = text[result.start : result.end]
-            logger.debug(f"Texto detectado: {detected_text}, Score: {result.score}")
             # Evitar etiquetas tipo <...>
             if detected_text.startswith("<") and detected_text.endswith(">"):
                 continue
@@ -336,7 +360,7 @@ class ColombianIDRecognizer(PatternRecognizer):
             if is_valid:
                 enhanced_results.append(
                     RecognizerResult(
-                        entity_type=self.ENTITY,  # Usar solo la entidad base
+                        entity_type=f"{self.ENTITY}_{doc_type}",
                         start=result.start,
                         end=result.end,
                         score=confidence,
@@ -516,8 +540,8 @@ class ColombianIDRecognizer(PatternRecognizer):
         return False, "", 0.0
 
     def get_supported_entities(self) -> List[str]:
-        """Devuelve la entidad principal soportada"""
-        return [self.ENTITY]
+        """Devuelve todas las entidades soportadas (tipos de documentos habilitados)"""
+        return [f"{self.ENTITY}_{doc_type}" for doc_type in self.ENABLED_DOCUMENTS]
 
 
 def register_enhanced_recognizers(registry):
