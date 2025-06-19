@@ -205,7 +205,16 @@ class PresidioService:
                 continue
                 
             # Aplicar filtro de umbral y entidades objetivo
-            if r.entity_type in self.target_entities and r.score >= thresholds.get(r.entity_type, 0.80):
+            # Permitir variantes de COLOMBIAN_ID_DOC (ej: COLOMBIAN_ID_DOC_CC, COLOMBIAN_ID_DOC_TI, etc.)
+            def is_target_entity(entity_type):
+                if entity_type in self.target_entities:
+                    return True
+                # Permitir variantes que empiezan por COLOMBIAN_ID_DOC
+                if any(entity_type.startswith(e) for e in self.target_entities if e == "COLOMBIAN_ID_DOC"):
+                    return True
+                return False
+
+            if is_target_entity(r.entity_type) and r.score >= thresholds.get(r.entity_type, 0.80):
                 filtered_results.append(r)
         
         # Registrar las entidades que SÍ serán anonimizadas
