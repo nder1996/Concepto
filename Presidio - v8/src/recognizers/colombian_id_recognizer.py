@@ -162,18 +162,14 @@ class ColombianIDRecognizer(PatternRecognizer):
         return {k: v for k, v in cls._FULL_DOCUMENT_CONFIG.items() if k in DOCUMENT_SCORES}
     
     def __init__(self):
+        self.name = "Colombian ID Recognizer"
+        self.supported_language = "es"
+        self.is_loaded = True
         patterns = self._build_patterns()
-        context = self._build_context_words()
         if not patterns:
             logger.error("No se encontraron patrones válidos para los documentos activos en DOCUMENT_SCORES.")
             raise ValueError("ColombianIDRecognizer debe inicializarse con al menos un patrón válido.")
-        super().__init__(
-            supported_entity=self.ENTITY,
-            patterns=patterns,
-            context=context,
-            supported_language="es",
-            name="ColombianIDRecognizer",
-        )
+        super().__init__(supported_entity=self.ENTITY, patterns=patterns)
         self.active_document_config = self.get_active_document_config()
         self.supported_entity = self.ENTITY  # Agregar atributo para compatibilidad con Presidio
 
