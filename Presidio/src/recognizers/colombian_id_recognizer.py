@@ -320,8 +320,8 @@ class ColombianIDRecognizer(PatternRecognizer):
             ]:
                 continue
             # --- NUEVO: Si el texto es un teléfono, omitirlo ---
-            if self._is_phone_number(detected_text):
-                continue
+            #if self._is_phone_number(detected_text):
+            #    continue
             # Extraer contexto (50 caracteres antes/después)
             context_start = max(0, result.start - 50)
             context_end = min(len(text), result.end + 50)

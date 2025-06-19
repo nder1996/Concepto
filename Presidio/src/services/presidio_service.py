@@ -110,16 +110,16 @@ class PresidioService:
             
         # Detectar posibles superposiciones entre COLOMBIAN_ID_DOC y PHONE_NUMBER
         overlapping_entities = {}
-        for i, r1 in enumerate(results):
-            for j, r2 in enumerate(results):
-                if i != j and r1.entity_type != r2.entity_type:
-                    # Verificar si hay superposición
-                    if (r1.start <= r2.end and r2.start <= r1.end):
-                        # Si una es COLOMBIAN_ID_DOC y otra es PHONE_NUMBER, guardamos el índice del PHONE_NUMBER
-                        if r1.entity_type == "COLOMBIAN_ID_DOC" and r2.entity_type == "PHONE_NUMBER":
-                            overlapping_entities[j] = "PHONE_NUMBER"
-                        elif r1.entity_type == "PHONE_NUMBER" and r2.entity_type == "COLOMBIAN_ID_DOC":
-                            overlapping_entities[i] = "PHONE_NUMBER"
+        #for i, r1 in enumerate(results):
+        #    for j, r2 in enumerate(results):
+        #        if i != j and r1.entity_type != r2.entity_type:
+        #            # Verificar si hay superposición
+        #            if (r1.start <= r2.end and r2.start <= r1.end):
+        #                # Si una es COLOMBIAN_ID_DOC y otra es PHONE_NUMBER, guardamos el índice del PHONE_NUMBER
+        #                if r1.entity_type == "COLOMBIAN_ID_DOC" and r2.entity_type == "PHONE_NUMBER":
+        #                    overlapping_entities[j] = "PHONE_NUMBER"
+        #                elif r1.entity_type == "PHONE_NUMBER" and r2.entity_type == "COLOMBIAN_ID_DOC":
+        #                    overlapping_entities[i] = "PHONE_NUMBER"
         
         # Filtrar resultados eliminando los PHONE_NUMBER que se solapan con COLOMBIAN_ID_DOC
         filtered_results = []
