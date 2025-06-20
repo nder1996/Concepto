@@ -41,10 +41,10 @@ ENTITY_THRESHOLDS = ENTITY_THRESHOLDS_ES
 
 # Puntajes (scores) centralizados para cada tipo de documento colombiano
 DOCUMENT_SCORES = {
-    "CC": 0.4,
+    "CC": 0.85,  # Incrementado para superar el umbral predeterminado
     #"TI": 0.85,
     #"PA": 0.85,
-    "CE": 0.85,
+    #"CE": 0.85,
     #"RC": 0.85,
     #"NIT": 0.95,
     #"PEP": 0.8,

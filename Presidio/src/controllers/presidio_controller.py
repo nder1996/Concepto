@@ -18,261 +18,151 @@ class PresidioController:
         app.add_url_rule('/preview-anonymization-text', 'preview_anonymization_text', self.preview_anonymization_text, methods=['POST'])
         app.add_url_rule('/preview-anonymization-file', 'preview_anonymization_file', self.preview_anonymization_file, methods=['POST'])
         app.add_url_rule('/health', 'health', self.health, methods=['GET'])
+
     def analyze(self):
         """Endpoint para analizar texto"""
-        self.logger.info("Iniciando análisis de texto")
         try:
             data = request.json
             text = data['text']
-            # Extraer el idioma del JSON, por defecto 'es' si no se proporciona
             language = data.get('language', 'es')
-            self.logger.info(f"Analizando texto de {len(text)} caracteres en idioma: {language}")
             
             results = self.presidio_service.analyze_text(text, language=language)
-            self.logger.info(f"Análisis completado: {len(results)} entidades encontradas")
-            
             return jsonify(results)
         except Exception as e:
-            self.logger.error(f"Error en análisis: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return self._error_response(e)
     
     def anonymize(self):
         """Endpoint para anonimizar texto"""
-        self.logger.info("Iniciando anonimización de texto")
         try:
             data = request.json
             text = data['text']
-            # Extraer el idioma del JSON, por defecto 'es' si no se proporciona
             language = data.get('language', 'es')
-            self.logger.info(f"Anonimizando texto de {len(text)} caracteres en idioma: {language}")
             
             anonymized_text = self.presidio_service.anonymize_text(text, language=language)
-            self.logger.info("Anonimización completada exitosamente")
-            
             return jsonify({'text': anonymized_text})
         except Exception as e:
-            self.logger.error(f"Error en anonimización: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return self._error_response(e)
     
     def analyze_file(self):
         """Endpoint para analizar archivos"""
-        self.logger.info("Iniciando análisis de archivo")
         try:
-            if 'file' not in request.files:
-                return jsonify({'error': 'No se proporcionó archivo'}), 400
-            
-            file = request.files['file']
-            file_content = file.read()
-            
-            self.logger.info(f"Procesando archivo: {file.filename}")
-              # Extraer texto del archivo
-            extracted_text = self.file_processor.process_file(file_content, file.filename)
-            self.logger.info(f"Texto extraído: {len(extracted_text)} caracteres")
-            
-            # Extraer el idioma de los parámetros, por defecto 'es' si no se proporciona
+            file = self._get_file_from_request()
+            text = self._extract_text_from_file(file)
             language = request.form.get('language', 'es')
-            self.logger.info(f"Analizando archivo en idioma: {language}")
             
-            # Analizar texto extraído
-            results = self.presidio_service.analyze_text(extracted_text, language=language)
-            self.logger.info(f"Archivo analizado: {len(results)} entidades encontradas")
+            results = self.presidio_service.analyze_text(text, language=language)
             
-            response = {
+            return jsonify({
                 'filename': file.filename,
-                'extracted_text': extracted_text,
+                'extracted_text': text,
                 'entities': results
-            }
-            
-            return jsonify(response)
+            })
         except Exception as e:
-            self.logger.error(f"Error procesando archivo: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return self._error_response(e)
     
     def anonymize_file(self):
         """Endpoint para anonimizar archivos"""
-        self.logger.info("Iniciando anonimización de archivo")
         try:
-            if 'file' not in request.files:
-                return jsonify({'error': 'No se proporcionó archivo'}), 400
-            
-            file = request.files['file']
-            file_content = file.read()
-            
-            self.logger.info(f"Anonimizando archivo: {file.filename}")
-              # Extraer texto del archivo
-            extracted_text = self.file_processor.process_file(file_content, file.filename)
-            
-            # Extraer el idioma de los parámetros, por defecto 'es' si no se proporciona
+            file = self._get_file_from_request()
+            text = self._extract_text_from_file(file)
             language = request.form.get('language', 'es')
-            self.logger.info(f"Anonimizando archivo en idioma: {language}")
             
-            # Anonimizar texto extraído
-            anonymized_text = self.presidio_service.anonymize_text(extracted_text, language=language)
-            self.logger.info("Archivo anonimizado exitosamente")
-            response = {
+            anonymized_text = self.presidio_service.anonymize_text(text, language=language)
+            
+            return jsonify({
                 'filename': file.filename,
-                'original_text': extracted_text,
+                'original_text': text,
                 'anonymized_text': anonymized_text
-            }
-            
-            return jsonify(response)
+            })
         except Exception as e:
-            self.logger.error(f"Error anonimizando archivo: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-    
-    def health(self):
-        """Endpoint para verificar salud del servicio"""
-        self.logger.info("Verificando salud del servicio")
-        
-        try:
-            # Obtener idiomas soportados desde el servicio
-            supported_languages = self.presidio_service.supported_languages
-            default_language = self.presidio_service.default_language
-            
-            response = {
-                'status': 'healthy',
-                'supported_languages': supported_languages,
-                'default_language': default_language,
-                'version': '1.0.0'
-            }
-            
-            return jsonify(response)
-        except Exception as e:
-            self.logger.error(f"Error en health check: {str(e)}")
-            return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
+            return self._error_response(e)
     
     def preview_anonymization_text(self):
-        """
-        Endpoint para previsualizar qué palabras serán anonimizadas en texto sin realizar la anonimización.
-        Acepta únicamente texto y devuelve las entidades detectadas con su contexto.
-        """
-        self.logger.info("Iniciando previsualización de anonimización de texto")
+        """Previsualizar anonimización de texto"""
         try:
-            text = None
-            language = 'es'  # Valor predeterminado en español
-            
-            # Verificar si es una solicitud JSON
-            content_type = request.headers.get('Content-Type', '')
-            self.logger.info(f"Content-Type recibido: {content_type}")
-            
-            # Para solicitudes application/json
-            if request.is_json:
-                self.logger.info("Procesando petición JSON")
-                try:
-                    data = request.get_json(force=True)                  
-                    if 'text' in data:
-                        text = data['text']
-                        language = data.get('language', 'es')
-                    else:
-                        return jsonify({'error': 'Se requiere el campo "text" en el JSON para previsualización'}), 400
-                except Exception as e:
-                    return jsonify({'error': f'Error al procesar JSON: {str(e)}'}), 400
-            
-            # Para solicitudes form-urlencoded
-            elif request.form and 'text' in request.form:
-                self.logger.info("Procesando texto desde formulario")
-                text = request.form.get('text')
-                language = request.form.get('language', 'es')
-            
-            # Si no se reconoce el formato, pero hay datos
-            else:
-                # Intentar procesar como JSON sin importar el Content-Type
-                try:
-                    data = request.get_json(force=True, silent=True)    
-                    if data and 'text' in data:
-                        self.logger.info("Forzando procesamiento como JSON")
-                        text = data['text']
-                        language = data.get('language', 'es')
-                    else:
-                        return jsonify({
-                            'error': 'No se encontró texto para previsualización',
-                            'content_type': content_type,
-                            'tip': 'Envíe un objeto JSON con el campo "text" o use form-urlencoded'
-                        }), 400
-                except Exception:
-                    return jsonify({
-                        'error': 'No se pudo interpretar la solicitud. Content-Type incorrecto o datos malformados',
-                        'content_type_recibido': content_type,
-                        'tip': 'Use application/json con un campo "text" o form-urlencoded'
-                    }), 400
+            # Obtener texto de JSON o form
+            data = request.get_json(force=True, silent=True) or {}
+            text = data.get('text') or request.form.get('text')
+            language = data.get('language') or request.form.get('language', 'es')
             
             if not text:
-                return jsonify({'error': 'No se proporcionó texto para analizar'}), 400
-                
-            self.logger.info(f"Analizando texto para previsualización (idioma: {language})")
+                return jsonify({'error': 'Se requiere el campo "text"'}), 400
             
-            # Analizar el texto para detectar entidades
-            analysis_results = self.presidio_service.analyze_text(text, language=language)
+            results = self._get_preview_results(text, language)
             
-            # Enriquecer los resultados con el texto original de cada entidad
-            for result in analysis_results:
-                result['texto_original'] = text[result['start']:result['end']]
-            
-            self.logger.info(f"Previsualización de texto completada: {len(analysis_results)} entidades encontradas")
-            
-            # Preparar la respuesta
-            response = {
+            return jsonify({
                 'fuente': 'text',
                 'texto_completo': text,
-                'entidades_detectadas': analysis_results,
-                'total_entidades': len(analysis_results)
-            }
-                
-            return jsonify(response)
-            
+                'entidades_detectadas': results,
+                'total_entidades': len(results)
+            })
         except Exception as e:
-            self.logger.error(f"Error en previsualización de texto: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-            
+            return self._error_response(e)
+    
     def preview_anonymization_file(self):
-        """
-        Endpoint para previsualizar qué palabras serán anonimizadas en archivos sin realizar la anonimización.
-        Acepta únicamente archivos y devuelve las entidades detectadas con su contexto.
-        """
-        self.logger.info("Iniciando previsualización de anonimización de archivo")
+        """Previsualizar anonimización de archivo"""
         try:
-            # Verificar si se envió un archivo
-            if 'file' not in request.files:
-                return jsonify({'error': 'No se proporcionó archivo'}), 400
-                
-            file = request.files['file']
-            if file.filename == '':
-                return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
-            
-            file_content = file.read()
+            file = self._get_file_from_request()
+            text = self._extract_text_from_file(file)
             language = request.form.get('language', 'es')
             
-            # Procesar el archivo según su tipo
-            self.logger.info(f"Procesando archivo para previsualización: {file.filename}")
-            try:
-                text = self.file_processor.process_file(file_content, file.filename)
-                if not text:
-                    return jsonify({'error': 'No se pudo extraer texto del archivo'}), 400
-            except Exception as e:
-                return jsonify({'error': f'Error al procesar el archivo: {str(e)}'}), 400
+            results = self._get_preview_results(text, language)
             
-            self.logger.info(f"Analizando archivo para previsualización (idioma: {language})")
-            
-            # Analizar el texto para detectar entidades
-            analysis_results = self.presidio_service.analyze_text(text, language=language)
-            
-            # Enriquecer los resultados con el texto original de cada entidad
-            for result in analysis_results:
-                result['texto_original'] = text[result['start']:result['end']]
-            
-            self.logger.info(f"Previsualización de archivo completada: {len(analysis_results)} entidades encontradas")
-            
-            # Preparar la respuesta
-            response = {
+            return jsonify({
                 'fuente': 'file',
                 'nombre_archivo': file.filename,
                 'texto_completo': text,
-                'entidades_detectadas': analysis_results,
-                'total_entidades': len(analysis_results)
-            }
-                
-            return jsonify(response)
-            
+                'entidades_detectadas': results,
+                'total_entidades': len(results)
+            })
         except Exception as e:
-            self.logger.error(f"Error en previsualización de archivo: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return self._error_response(e)
+    
+    def health(self):
+        """Endpoint para verificar salud del servicio"""
+        try:
+            return jsonify({
+                'status': 'healthy',
+                'supported_languages': self.presidio_service.supported_languages,
+                'default_language': self.presidio_service.default_language,
+                'version': '1.0.0'
+            })
+        except Exception as e:
+            return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
+    
+    # Métodos helper privados
+    def _get_file_from_request(self):
+        """Obtiene y valida archivo de la request"""
+        if 'file' not in request.files:
+            raise ValueError('No se proporcionó archivo')
+        
+        file = request.files['file']
+        if file.filename == '':
+            raise ValueError('No se seleccionó ningún archivo')
+        
+        return file
+    
+    def _extract_text_from_file(self, file):
+        """Extrae texto del archivo"""
+        file_content = file.read()
+        text = self.file_processor.process_file(file_content, file.filename)
+        
+        if not text:
+            raise ValueError('No se pudo extraer texto del archivo')
+        
+        return text
+    
+    def _get_preview_results(self, text, language):
+        """Obtiene resultados de previsualización con texto original"""
+        results = self.presidio_service.analyze_text(text, language=language)
+        
+        # Agregar texto original a cada resultado
+        for result in results:
+            result['texto_original'] = text[result['start']:result['end']]
+        
+        return results
+    
+    def _error_response(self, error):
+        """Maneja respuestas de error de forma consistente"""
+        self.logger.error(f"Error en endpoint: {str(error)}")
+        return jsonify({'error': str(error)}), 500

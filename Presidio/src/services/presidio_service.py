@@ -1,182 +1,142 @@
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from typing import List, Dict, Any
-import spacy
-from src.utils.logger import setup_logger
-from src.config.entity_config import TARGET_ENTITIES, ENTITY_THRESHOLDS, THRESHOLDS_BY_LANGUAGE
+import logging
+from src.config.entity_config import TARGET_ENTITIES, THRESHOLDS_BY_LANGUAGE
 from src.config.language_config import initialize_language_analyzers, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE
+from src.utils.logger import setup_logger
 
 class PresidioService:
     def __init__(self):
-        self.logger = setup_logger("PresidioService")
+        self.logger = setup_logger(__name__)
         
-        # Inicializar analizadores para diferentes idiomas desde language_config
-        self.logger.info("Inicializando analizadores para diferentes idiomas...")
+        # Inicializar analizadores
         try:
-            # Obtener los analizadores configurados para cada idioma
             self.analyzers = initialize_language_analyzers()
-            self.logger.info("Motores de análisis inicializados correctamente.")
+            self.anonymizer = AnonymizerEngine()
         except Exception as e:
-            self.logger.error(f"Error al inicializar los motores de análisis: {str(e)}")
+            self.logger.error(f"Error al inicializar: {str(e)}")
             raise
-            
-        # Inicializar el motor de anonimización
-        self.anonymizer = AnonymizerEngine()
-          # Idiomas soportados (importados de language_config)
+        
+        # Configuración
         self.supported_languages = SUPPORTED_LANGUAGES
         self.default_language = DEFAULT_LANGUAGE
-        # Usar configuración centralizada
         self.target_entities = TARGET_ENTITIES
         self.thresholds_by_language = THRESHOLDS_BY_LANGUAGE
-        # Registrar la inicialización
-        self.logger.info(f"Servicio Presidio inicializado con soporte para idiomas: {', '.join(self.supported_languages)}")
-          # Verificar que los reconocedores personalizados estén registrados
-        self._verify_custom_recognizers()
     
-    def _verify_custom_recognizers(self):
-        """
-        Verifica que los reconocedores personalizados estén correctamente registrados.
-        """
-        for lang, analyzer in self.analyzers.items():
-            registry = analyzer.registry
-            recognizer_names = [r.name for r in registry.recognizers]
-            
-            # Agregar detalles de cada reconocedor para mejor depuración
-            self.logger.info(f"Verificando reconocedores para idioma {lang}:")
-            for r in registry.recognizers:
-                recognizer_details = {
-                    'name': getattr(r, 'name', 'sin nombre'),
-                    'supported_entity': getattr(r, 'supported_entity', 'N/A'),
-                    'supported_language': getattr(r, 'supported_language', 'N/A'),
-                }
-                self.logger.debug(f"Reconocedor: {recognizer_details}")
-            
-            # Verificar específicamente que el reconocedor COLOMBIAN_LOCATION esté disponible
-            #location_recognizers = []
-            #for r in registry.recognizers:
-            #    try:
-            #        # Verificar si el reconocedor tiene el atributo supported_entity
-            #        if hasattr(r, 'supported_entity') and r.supported_entity == "COLOMBIAN_LOCATION":
-            #            location_recognizers.append(r)
-            #            self.logger.debug(f"Encontrado reconocedor COLOMBIAN_LOCATION: {r.name} para idioma {getattr(r, 'supported_language', 'N/A')}")
-            #        # También verificar si el reconocedor tiene el atributo entity_name
-            #        elif hasattr(r, 'entity_name') and r.entity_name == "COLOMBIAN_LOCATION":
-            #            location_recognizers.append(r)
-            #        # Verificar otros posibles atributos
-            #        elif hasattr(r, 'entities') and "COLOMBIAN_LOCATION" in r.entities:
-            #            location_recognizers.append(r)
-            #    except Exception as e:
-            #        self.logger.warning(f"Error al verificar reconocedor {r.name if hasattr(r, 'name') else 'desconocido'}: {str(e)}")
-            
-            #if location_recognizers:
-            #    self.logger.info(f"Reconocedor COLOMBIAN_LOCATION disponible en idioma {lang}")
-            #else:
-            #   self.logger.warning(f"¡IMPORTANTE! Reconocedor COLOMBIAN_LOCATION NO disponible en idioma {lang}")
-                
-            # Mostrar todos los reconocedores disponibles para este idioma
-           # self.logger.info(f"Reconocedores disponibles para {lang}: {', '.join(recognizer_names)}")
-            
     def analyze_text(self, text: str, language: str = 'es') -> List[Dict[str, Any]]:
-        self.logger.info(f"Analizando texto en idioma: {language}")
-
-        # Validar idioma y seleccionar analizador
+        """Analiza texto y retorna entidades detectadas que superan el umbral"""
+        # Seleccionar analizador y umbrales
         analyzer = self.analyzers.get(language, self.analyzers[self.default_language])
         thresholds = self.thresholds_by_language.get(language, self.thresholds_by_language['en'])
-
-        # Analizar texto
-        results = analyzer.analyze(text=text, language=language)
-        self.logger.info(f"Total de entidades detectadas: {len(results)}")
-
-        # Filtrar y clasificar entidades
+        
+        # Obtener y filtrar resultados crudos
+        raw_results = analyzer.analyze(text=text, language=language)
         filtered_results = [
+            r for r in raw_results
+            if self._is_valid_entity(r.entity_type, r.score, thresholds)
+        ]
+        
+        # Log detallado de entidades detectadas
+        self._log_entity_analysis(text, raw_results, thresholds, operation="ANÁLISIS")
+        
+        # Retornar solo las entidades válidas como dicts
+        return [
             {
                 'entity_type': r.entity_type,
                 'start': r.start,
                 'end': r.end,
                 'score': r.score
             }
-            for r in results
-            if r.entity_type in self.target_entities and r.score >= thresholds.get(r.entity_type, 0.80)
+            for r in filtered_results
         ]
-
-        self.logger.info(f"Entidades que superan el umbral: {len(filtered_results)}")
-        return filtered_results
-        
+    
     def anonymize_text(self, text: str, language: str = 'es') -> str:
-        """Anonimiza texto reemplazando solo entidades específicas con puntaje superior al umbral"""
-        # Validar idioma y usar el predeterminado si no es soportado
+        """Anonimiza texto reemplazando entidades específicas"""
+        # Validar idioma
         if language not in self.supported_languages:
-            self.logger.warning(f"Idioma '{language}' no soportado, usando idioma predeterminado: {self.default_language}")
             language = self.default_language
-            
-        # Seleccionar el analizador correspondiente al idioma
-        if language in self.analyzers:
-            analyzer = self.analyzers[language]
-        else:
-            # Si no tenemos un analizador para el idioma, usamos el analizador del idioma predeterminado
-            self.logger.warning(f"No se encontró analizador para el idioma {language}, usando el analizador predeterminado")
-            analyzer = self.analyzers[self.default_language]
-            
-        self.logger.info(f"Utilizando analizador para idioma: {language}")
         
-        # Obtener umbrales específicos para el idioma
+        # Seleccionar analizador y umbrales
+        analyzer = self.analyzers.get(language, self.analyzers[self.default_language])
         thresholds = self.thresholds_by_language.get(language, self.thresholds_by_language['en'])
-        self.logger.info(f"Utilizando umbrales para idioma: {language}")
         
-        # Analizar el texto completo
-        results = analyzer.analyze(text=text, language=language)
+        # Obtener y filtrar resultados crudos
+        raw_results = analyzer.analyze(text=text, language=language)
+        filtered_results = [
+            r for r in raw_results
+            if self._is_valid_entity(r.entity_type, r.score, thresholds)
+        ]
         
-        # Registrar todas las entidades detectadas originalmente
-        self.logger.info(f"Total de entidades detectadas: {len(results)}")
-        for r in results:
-            self.logger.info(
-                f"Entidad detectada: {r.entity_type}, "
-                f"Score: {r.score}, Texto: {text[r.start:r.end]}"
-            )
-            
-        # Detectar posibles superposiciones entre COLOMBIAN_ID_DOC y PHONE_NUMBER
-        overlapping_entities = {}
-        for i, r1 in enumerate(results):
-            for j, r2 in enumerate(results):
-                if i != j and r1.entity_type != r2.entity_type:
-                    # Verificar si hay superposición
-                    if (r1.start <= r2.end and r2.start <= r1.end):
-                        # Si una es COLOMBIAN_ID_DOC y otra es PHONE_NUMBER, guardamos el índice del PHONE_NUMBER
-                        if r1.entity_type == "COLOMBIAN_ID_DOC" and r2.entity_type == "PHONE_NUMBER":
-                            overlapping_entities[j] = "PHONE_NUMBER"
-                        elif r1.entity_type == "PHONE_NUMBER" and r2.entity_type == "COLOMBIAN_ID_DOC":
-                            overlapping_entities[i] = "PHONE_NUMBER"
+        # Log detallado de entidades detectadas para anonimización
+        self._log_entity_analysis(text, raw_results, thresholds, operation="ANONIMIZACIÓN")
         
-        # Filtrar resultados eliminando los PHONE_NUMBER que se solapan con COLOMBIAN_ID_DOC
-        filtered_results = []
-        for i, r in enumerate(results):
-            # Si es un teléfono que se solapa con una cédula, lo ignoramos
-            if i in overlapping_entities and overlapping_entities[i] == "PHONE_NUMBER":
-                self.logger.info(f"Ignorando número telefónico que se solapa con cédula: {text[r.start:r.end]}")
-                continue
-                
-            # Aplicar filtro de umbral y entidades objetivo
-            # Permitir variantes de COLOMBIAN_ID_DOC (ej: COLOMBIAN_ID_DOC_CC, COLOMBIAN_ID_DOC_TI, etc.)
-            def is_target_entity(entity_type):
-                if entity_type in self.target_entities:
-                    return True
-                # Permitir variantes que empiezan por COLOMBIAN_ID_DOC
-                if any(entity_type.startswith(e) for e in self.target_entities if e == "COLOMBIAN_ID_DOC"):
-                    return True
-                return False
-
-            if is_target_entity(r.entity_type) and r.score >= thresholds.get(r.entity_type, 0.80):
-                filtered_results.append(r)
-        
-        # Registrar las entidades que SÍ serán anonimizadas
-        self.logger.info(f"Entidades que serán anonimizadas: {len(filtered_results)}")
-        for r in filtered_results:
-            threshold = thresholds.get(r.entity_type, 0.80)
-            self.logger.info(
-                f"Entidad anonimizada: {r.entity_type}, "
-                f"Score: {r.score} (umbral: {threshold}), Texto: {text[r.start:r.end]}"
-            )
-        
-        # Anonimizar solo las entidades filtradas
+        # Anonimizar solo entidades válidas
         anonymized = self.anonymizer.anonymize(text=text, analyzer_results=filtered_results)
         return anonymized.text
+    
+    def _log_entity_analysis(self, text: str, results, thresholds: dict, operation: str):
+        """Logger especializado para análisis de entidades"""
+        if not results:
+            self.logger.info(f"🔍 {operation} - No se detectaron entidades")
+            return
+        
+        self.logger.info(f"🔍 === {operation} DE ENTIDADES ===")
+        self.logger.info(f"📝 Texto: {len(text)} caracteres")
+        self.logger.info(f"🎯 Total detectadas: {len(results)}")
+        
+        accepted = []
+        rejected = []
+        
+        for r in results:
+            entity_text = text[r.start:r.end]
+            threshold = thresholds.get(r.entity_type, 0.80)
+            is_target = r.entity_type in self.target_entities
+            score_ok = r.score >= threshold
+            is_valid = is_target and score_ok
+            
+            entity_info = {
+                'type': r.entity_type,
+                'text': entity_text,
+                'score': round(r.score, 3),
+                'threshold': threshold,
+                'start': r.start,
+                'end': r.end
+            }
+            
+            if is_valid:
+                accepted.append(entity_info)
+            else:
+                rejected.append(entity_info)
+        
+        # Log entidades aceptadas
+        if accepted:
+            self.logger.info(f"✅ ENTIDADES ACEPTADAS ({len(accepted)}):")
+            for entity in accepted:
+                self.logger.info(
+                    f"   ➤ {entity['type']}: '{entity['text']}' "
+                    f"(Score: {entity['score']} ≥ {entity['threshold']}) "
+                    f"[{entity['start']}:{entity['end']}]"
+                )
+        
+        # Log entidades rechazadas
+        if rejected:
+            self.logger.info(f"❌ ENTIDADES RECHAZADAS ({len(rejected)}):")
+            for entity in rejected:
+                is_target = entity['type'] in self.target_entities
+                reason = "Score bajo" if is_target else "No es entidad objetivo"
+                self.logger.info(
+                    f"   ➤ {entity['type']}: '{entity['text']}' "
+                    f"(Score: {entity['score']} vs {entity['threshold']}) "
+                    f"- {reason}"
+                )
+        
+        self.logger.info(f"📊 Resumen: {len(accepted)} aceptadas, {len(rejected)} rechazadas")
+        self.logger.info("=" * 60)
+    
+    def _is_valid_entity(self, entity_type: str, score: float, thresholds: dict) -> bool:
+        """Verifica si una entidad es válida para procesar"""
+        return (
+            entity_type in self.target_entities and 
+            score >= thresholds.get(entity_type, 0.80)
+        )
