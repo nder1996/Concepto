@@ -30,7 +30,8 @@ class PresidioService:
         analyzer = self.analyzers.get(language, self.analyzers[self.default_language])
         thresholds = self.thresholds_by_language.get(language, self.thresholds_by_language['en'])
         
-        raw_results = analyzer.analyze(text=text, entities=self.target_entities, language=language)
+        # Obtener y filtrar resultados crudos
+        raw_results = analyzer.analyze(text=text, language=language)
         filtered_results = [
             r for r in raw_results
             if self._is_valid_entity(r.entity_type, r.score, thresholds)
@@ -60,7 +61,8 @@ class PresidioService:
         analyzer = self.analyzers.get(language, self.analyzers[self.default_language])
         thresholds = self.thresholds_by_language.get(language, self.thresholds_by_language['en'])
         
-        raw_results = analyzer.analyze(text=text, entities=self.target_entities, language=language)
+        # Obtener y filtrar resultados crudos
+        raw_results = analyzer.analyze(text=text, language=language)
         filtered_results = [
             r for r in raw_results
             if self._is_valid_entity(r.entity_type, r.score, thresholds)

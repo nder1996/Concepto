@@ -177,16 +177,35 @@ class ColombianIDRecognizer(PatternRecognizer):
                     re.fullmatch(config["pattern"], doc_text)):
                     
                     # Confianza baja pero válida
-                    candidates.append((doc_type, config["score"] * 0.5))        # Retornar el mejor candidato
+                    candidates.append((doc_type, config["score"] * 0.5))
+
+        # Retornar el mejor candidato
         if candidates:
             doc_type, confidence = max(candidates, key=lambda x: x[1])
             return True, doc_type, confidence
             
         return False, "", 0.0
 
-    def analyze(self, text: str, nlp_artifacts=None, entities: List[str] = None) -> List[RecognizerResult]:
-        """Delegar al análisis base de Presidio"""
-        return super().analyze(text=text, nlp_artifacts=nlp_artifacts, entities=entities)
+    def analyze(self, text: str, entities: List[str], nlp_artifacts=None) -> List[RecognizerResult]:
+        """Análisis simplificado"""
+        base_results = super().analyze(text, entities, nlp_artifacts)
+        enhanced_results = []
+
+        for result in base_results:
+            detected_text = text[result.start:result.end]
+            context = self._get_context(text, result.start, result.end)
+            
+            is_valid, doc_type, confidence = self._validate_document(detected_text, context)
+            
+            if is_valid:
+                enhanced_results.append(RecognizerResult(
+                    entity_type=self.ENTITY,
+                    start=result.start,
+                    end=result.end,
+                    score=confidence
+                ))
+        
+        return enhanced_results
 
     def get_supported_entities(self) -> List[str]:
         return [self.ENTITY]
