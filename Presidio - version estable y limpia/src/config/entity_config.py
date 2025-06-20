@@ -9,7 +9,7 @@ TARGET_ENTITIES = [
     "PHONE_NUMBER", 
     "EMAIL_ADDRESS",
     "COLOMBIAN_ID_DOC",  # Cédulas y otros documentos de identidad colombianos
-    "COLOMBIAN_LOCATION",  # Ubicaciones específicas de Colombia usando DIVIPOLA
+    #"COLOMBIAN_LOCATION",  # Ubicaciones específicas de Colombia usando DIVIPOLA
 ]
 
 # Umbrales específicos para cada tipo de entidad - configuración para inglés
@@ -18,16 +18,16 @@ ENTITY_THRESHOLDS_EN = {
     "PHONE_NUMBER": 0.2,  # Umbral bajo para mejorar detección
     "EMAIL_ADDRESS": 0.6,  # Ajustado para mejor precisión
     "COLOMBIAN_ID_DOC": 0.1,  # Reducido para capturar más documentos de identidad
-    "COLOMBIAN_LOCATION": 0.5,  # Umbral para ubicaciones específicas de Colombia usando DIVIPOLA
+    #"COLOMBIAN_LOCATION": 0.1,  # Umbral para ubicaciones específicas de Colombia usando DIVIPOLA
 }
 
 # Umbrales específicos para cada tipo de entidad - configuración para español
 ENTITY_THRESHOLDS_ES = {
     #"PERSON": 0.1,  # Umbral bajo para capturar más candidatos
-    "PHONE_NUMBER": 0.1,  # Ajustado para mejorar detección de números de teléfono
+    "PHONE_NUMBER": 0.2,  # Más alto para evitar falsos positivos con cédulas
     "EMAIL_ADDRESS": 0.6,  # Ajustado para mejor precisión
     "COLOMBIAN_ID_DOC": 0.1,  # Reducido para mejorar la detección en español
-    "COLOMBIAN_LOCATION": 0.5,  # Umbral específico para ubicaciones colombianas usando DIVIPOLA
+   # "COLOMBIAN_LOCATION": 0.1,  # Umbral específico para ubicaciones colombianas usando DIVIPOLA
 }
 
 # Diccionario de umbrales por idioma

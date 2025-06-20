@@ -5,7 +5,6 @@ Registro simplificado de reconocedores personalizados para Presidio.
 from presidio_analyzer import RecognizerRegistry
 from src.recognizers.colombian_id_recognizer import ColombianIDRecognizer
 from src.recognizers.colombian_location_recognizer import ColombianLocationRecognizer
-from src.recognizers.colombian_phone_recognizer import ColombianPhoneRecognizer  
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -24,8 +23,7 @@ def register_custom_recognizers(registry: RecognizerRegistry, language: str = "e
     
     recognizers = [
         ColombianIDRecognizer(),
-        ColombianLocationRecognizer(supported_language=language),
-        ColombianPhoneRecognizer(supported_language=language),
+        ColombianLocationRecognizer(supported_language=language)
     ]
     
     # Registrar reconocedores personalizados

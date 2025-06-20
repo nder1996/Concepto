@@ -26,7 +26,7 @@ def log_active_recognizers(logger=None):
         
         # Listar reconocedores
         recognizers = registry.recognizers
-        logger.info(f"Total de reconocedores activos: {len(recognizers)}")
+        #logger.info(f"Total de reconocedores activos: {len(recognizers)}")
         
         # Mostrar detalles de cada reconocedor
         for i, recognizer in enumerate(recognizers, 1):
@@ -35,7 +35,7 @@ def log_active_recognizers(logger=None):
                 entity = getattr(recognizer, 'supported_entity', 'N/A')
                 language = getattr(recognizer, 'supported_language', 'N/A')
                 
-                logger.info(f"{i}. Reconocedor: {name}, Entidad: {entity}, Idioma: {language}")
+                #logger.info(f"{i}. Reconocedor: {name}, Entidad: {entity}, Idioma: {language}")
             except Exception as e:
                 logger.error(f"Error al obtener información del reconocedor #{i}: {e}")
                 

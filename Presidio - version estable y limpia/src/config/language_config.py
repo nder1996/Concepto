@@ -6,7 +6,6 @@ from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 from src.recognizers.colombian_id_recognizer import ColombianIDRecognizer
 from src.recognizers.colombian_location_recognizer import ColombianLocationRecognizer
-from src.recognizers.colombian_phone_recognizer import ColombianPhoneRecognizer
 import importlib.util
 import logging
 
@@ -87,7 +86,6 @@ def _register_recognizers(registry, language):
         try:
             registry.add_recognizer(ColombianIDRecognizer())
             registry.add_recognizer(ColombianLocationRecognizer(supported_language=language))
-            registry.add_recognizer(ColombianPhoneRecognizer(supported_language=language))
         except Exception as e:
             logger.error(f"Error registrando reconocedores personalizados: {e}")
 

@@ -185,21 +185,8 @@ class ColombianIDRecognizer(PatternRecognizer):
         return False, "", 0.0
 
     def analyze(self, text: str, nlp_artifacts=None, entities: List[str] = None) -> List[RecognizerResult]:
-        """Filtrar resultados de documentos usando validación y evitar teléfonos"""
-        # Ejecutar análisis base para obtener coincidencias
-        results = super().analyze(text=text, nlp_artifacts=nlp_artifacts, entities=entities)
-        filtered_results = []
-        for res in results:
-            # Extraer texto detectado y contexto
-            doc_text = text[res.start:res.end]
-            context = self._get_context(text, res.start, res.end)
-            # Validar documento (filtra teléfonos automáticamente)
-            valid, doc_type, confidence = self._validate_document(doc_text, context)
-            if valid:
-                # Ajustar puntuación basada en validación
-                res.score = confidence
-                filtered_results.append(res)
-        return filtered_results
+        """Delegar al análisis base de Presidio"""
+        return super().analyze(text=text, nlp_artifacts=nlp_artifacts, entities=entities)
 
     def get_supported_entities(self) -> List[str]:
         return [self.ENTITY]
